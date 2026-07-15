@@ -165,7 +165,7 @@ select * from (values
   ('Auto''s (verzekering/brandstof/wegenbelasting)', 654::numeric, date '2026-01-01', null::date, 'Yuki YTD-gemiddelde, excl. lease-termijnen'),
   ('Autolease-termijnen',                0::numeric,  date '2026-01-01', null::date,       'VUL IN: maandtermijn van de 2 leasecontracten (€36k langlopend op balans)'),
   ('Marketing & verkoop',             2255::numeric,  date '2026-01-01', null::date,       'Yuki YTD-gemiddelde — grootste post: advertenties €14k YTD'),
-  ('Kantoor, adviseurs & overig',     2525::numeric,  date '2026-01-01', null::date,       'Yuki YTD-gemiddelde (adviseurs €10,5k YTD, deels eenmalig?)')
+  ('Kantoor, adviseurs & overig',     1070::numeric,  date '2026-01-01', null::date,       'Yuki YTD-gemiddelde excl. eenmalige adviseurskosten (€9.476 eruit gelaten)')
 ) v(categorie, bedrag_pm, vanaf_maand, tot_maand, note)
 where not exists (select 1 from fin_costs_budget);
 
