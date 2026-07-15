@@ -102,6 +102,23 @@ function acties() {
   return list.sort((a, b) => b.urg - a.urg);
 }
 
+// ── flex (wekelijkse marge-uitkering Pronkert) ─────────────────
+function flexStats() {
+  const wk = D.flex.slice().sort((a, b) => a.week.localeCompare(b.week));
+  const sum = arr => arr.reduce((s, w) => s + +w.bedrag, 0);
+  const last4 = wk.slice(-4), prev4 = wk.slice(-8, -4);
+  const avg4 = last4.length ? sum(last4) / last4.length : 0;
+  const avgPrev4 = prev4.length ? sum(prev4) / prev4.length : null;
+  const trendPct = avgPrev4 ? (avg4 - avgPrev4) / avgPrev4 : null;
+  const maandRunRate = avg4 * 52 / 12;
+  const laatste = wk[wk.length - 1] || null;
+  const ytd = sum(wk.filter(w => w.week.slice(0, 4) === todayISO().slice(0, 4)));
+  return { weken: wk, laatste, avg4, avgPrev4, trendPct, maandRunRate, ytd };
+}
+function flexInMaand(mk) {
+  return D.flex.filter(w => monthKey(w.week) === mk).reduce((s, w) => s + +w.bedrag, 0);
+}
+
 // ── KPI's & risico's ───────────────────────────────────────────
 function kpis() {
   const t = todayISO(), mk = monthKey(t);
@@ -156,7 +173,8 @@ function potjes() {
   const btwPct = Number(S('btw_pct', .21));
   const inQ = D.installments.filter(i => i.factuurdatum && i.factuurdatum >= qStart && i.factuurdatum <= t
     && (i.status === 'gefactureerd' || i.status === 'betaald'));
-  const btwOntvangen = inQ.reduce((s, i) => s + +i.bedrag_excl * btwPct, 0);
+  const flexQ = D.flex.filter(w => w.week >= qStart && w.week <= t).reduce((s, w) => s + +w.bedrag, 0);
+  const btwOntvangen = inQ.reduce((s, i) => s + +i.bedrag_excl * btwPct, 0) + flexQ * btwPct;
   const mndInQ = (+t.slice(5, 7) - 1) % 3 + 1;
   const voorbelasting = Number(S('voorbelasting_pm', 0)) * mndInQ;
   const btwPot = Math.max(0, btwOntvangen - voorbelasting);
@@ -166,8 +184,10 @@ function potjes() {
   const ankerDatum = S('yuki_winst_datum', null);
   const start = ankerDatum && ankerDatum.slice(0, 4) === String(y) ? ankerDatum : `${y}-01-01`;
   const basisWinst = start === ankerDatum ? ankerWinst : 0;
-  const omzetYtd = basisWinst + D.installments.filter(i => i.factuurdatum && i.factuurdatum > start
-    && (i.status === 'gefactureerd' || i.status === 'betaald')).reduce((s, i) => s + +i.bedrag_excl, 0);
+  const omzetYtd = basisWinst
+    + D.installments.filter(i => i.factuurdatum && i.factuurdatum > start
+      && (i.status === 'gefactureerd' || i.status === 'betaald')).reduce((s, i) => s + +i.bedrag_excl, 0)
+    + D.flex.filter(w => w.week > start && w.week.slice(0, 4) === String(y)).reduce((s, w) => s + +w.bedrag, 0);
   let kostenYtd = 0;
   for (let m = 0; m < 12; m++) {
     const mk = `${y}-${String(m + 1).padStart(2, '0')}-01`;
@@ -186,6 +206,7 @@ function projectie(maanden = 12, scenario = {}) {
   const sc = Object.assign({
     omzetPm: Number(S('scenario_omzet_pm', 25000)),
     omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 1, aflossenAan: true,
+    flexFactor: 1,                                    // 1 = flex blijft op run-rate; 2 = verdubbelt; 0 = valt weg
   }, scenario);
   const t = todayISO();
   const btwPct = Number(S('btw_pct', .21));
@@ -193,7 +214,7 @@ function projectie(maanden = 12, scenario = {}) {
   const m0 = monthKey(t);
   const keys = [], labels = [];
   for (let i = 0; i < maanden; i++) { const k = addMonths(m0, i); keys.push(k); labels.push(fmtMaand(k)); }
-  const bucket = Object.fromEntries(keys.map(k => [k, { inFact: 0, inScenario: 0, uitKosten: 0, uitBtw: 0, uitLening: 0 }]));
+  const bucket = Object.fromEntries(keys.map(k => [k, { inFact: 0, inScenario: 0, inFlex: 0, uitKosten: 0, uitBtw: 0, uitLening: 0 }]));
   const put = (k, f, v) => { if (bucket[k]) bucket[k][f] += v; else if (k < m0 && f.startsWith('in')) bucket[m0][f] += v; };
 
   // 1. verwachte ontvangsten uit het echte factuurschema (incl. btw)
@@ -207,9 +228,12 @@ function projectie(maanden = 12, scenario = {}) {
       }
     }
   }
-  // 2. scenario: nieuwe omzet (facturen volgen ~1 mnd later, incl. btw)
+  // 2. scenario: nieuwe W&S-omzet (facturen volgen ~1 mnd later, incl. btw)
   const omzet = sc.omzetPm * (1 - sc.omzetDipPct);
   keys.forEach((k, i) => { if (i >= 1) put(k, 'inScenario', omzet * (1 + btwPct)); });
+  // 2b. flex: doorlopende weekmarge (run-rate laatste 4 weken × factor, incl. btw)
+  const flexPm = flexStats().maandRunRate * sc.flexFactor;
+  keys.forEach(k => put(k, 'inFlex', flexPm * (1 + btwPct)));
   // 3. kosten: werkelijk waar bekend, anders budget (+ evt. extra hire)
   keys.forEach((k, i) => {
     let kost = actueelVoorMaand(k) ?? budgetVoorMaand(k);
@@ -224,12 +248,12 @@ function projectie(maanden = 12, scenario = {}) {
     let btwQ = 0;
     for (let j = 3; j >= 1; j--) {
       const pk = addMonths(k, -j), b = bucket[pk];
-      if (b) btwQ += (b.inFact + b.inScenario) * btwPct / (1 + btwPct);
+      if (b) btwQ += (b.inFact + b.inScenario + b.inFlex) * btwPct / (1 + btwPct);
       else {
-        // vóór projectiestart: btw over werkelijk gefactureerd in die maand
+        // vóór projectiestart: btw over werkelijk gefactureerd + flex in die maand
         const fact = D.installments.filter(x => x.factuurdatum && monthKey(x.factuurdatum) === pk
           && (x.status === 'gefactureerd' || x.status === 'betaald')).reduce((s, x) => s + +x.bedrag_excl, 0);
-        btwQ += fact * btwPct;
+        btwQ += (fact + flexInMaand(pk)) * btwPct;
       }
     }
     put(k, 'uitBtw', Math.max(0, btwQ - voorb * 3));
@@ -242,18 +266,18 @@ function projectie(maanden = 12, scenario = {}) {
   let saldo = start;
   const rows = keys.map((k, i) => {
     const b = bucket[k];
-    const inTot = b.inFact + b.inScenario;
+    const inTot = b.inFact + b.inScenario + b.inFlex;
     const uitTot = b.uitKosten + b.uitBtw + b.uitLening;
     saldo += inTot - uitTot;
     return { key: k, label: labels[i], ...b, inTot, uitTot, saldo };
   });
   const laagste = rows.reduce((a, r) => r.saldo < a.saldo ? r : a, { saldo: Infinity });
   const negatief = rows.find(r => r.saldo < 0);
-  // runway zonder nieuwe omzet: hoeveel maanden dekt huidig saldo + zeker factuurschema de kosten
+  // runway zonder nieuwe W&S-omzet: saldo + zeker factuurschema + doorlopende flex vs. kosten
   let rSaldo = start, runway = 0;
   for (const k of keys) {
     const b = bucket[k];
-    rSaldo += b.inFact - (b.uitKosten + b.uitBtw + b.uitLening);
+    rSaldo += b.inFact + b.inFlex - (b.uitKosten + b.uitBtw + b.uitLening);
     if (rSaldo < 0) break;
     runway++;
   }

@@ -4,7 +4,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const D = {            // alle data, geladen in loadAll()
   placements: [], installments: [], budget: [], actuals: [],
   saldi: [], tx: [], loans: [], loanPayments: [], settings: {},
-  dismissed: [], candidates: [], clients: [],
+  dismissed: [], candidates: [], clients: [], flex: [],
 };
 
 const $ = s => document.querySelector(s);
@@ -57,7 +57,7 @@ async function loadAll() {
     if (order) r = r.order(order.col, { ascending: order.asc !== false });
     return r;
   };
-  const [pl, inst, bud, act, sal, tx, ln, lp, st, dis, cand, cli] = await Promise.all([
+  const [pl, inst, bud, act, sal, tx, ln, lp, st, dis, fx, cand, cli] = await Promise.all([
     q('fin_placements', { col: 'id' }),
     q('fin_installments', { col: 'geplande_datum' }),
     q('fin_costs_budget', { col: 'vanaf_maand' }),
@@ -68,16 +68,17 @@ async function loadAll() {
     q('fin_loan_payments', { col: 'datum' }),
     q('fin_settings'),
     q('fin_dismissed_candidates'),
+    q('fin_flex_weken', { col: 'week' }),
     q('candidates'),
     q('clients'),
   ]);
-  const bad = [pl, inst, bud, act, sal, tx, ln, lp, st, dis].find(r => r.error);
+  const bad = [pl, inst, bud, act, sal, tx, ln, lp, st, dis, fx].find(r => r.error);
   if (bad) throw bad.error;
   D.placements = pl.data; D.installments = inst.data; D.budget = bud.data;
   D.actuals = act.data; D.saldi = sal.data; D.tx = tx.data;
   D.loans = ln.data; D.loanPayments = lp.data;
   D.settings = Object.fromEntries((st.data || []).map(r => [r.key, r.value]));
-  D.dismissed = dis.data;
+  D.dismissed = dis.data; D.flex = fx.data;
   D.candidates = cand.error ? [] : cand.data;   // pijplijn kan onbereikbaar zijn — app blijft werken
   D.clients = cli.error ? [] : cli.data;
 }
@@ -136,8 +137,9 @@ function lineChart(labels, series, { height = 220, zeroLine = true } = {}) {
   // gridlines
   for (let t = 0; t <= 4; t++) {
     const v = min + (max - min) * t / 4, yy = y(v);
+    const yLbl = Math.abs(max) >= 5000 ? Math.round(v / 1000) + 'k' : String(Math.round(v));
     g += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="var(--line)" stroke-width="1"/>` +
-         `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${Math.round(v / 1000)}k</text>`;
+         `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${yLbl}</text>`;
   }
   if (zeroLine && min < 0) g += `<line x1="${padL}" y1="${y(0)}" x2="${W - padR}" y2="${y(0)}" stroke="var(--red)" stroke-dasharray="4 3" stroke-width="1"/>`;
   labels.forEach((l, i) => {

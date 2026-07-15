@@ -102,6 +102,15 @@ create table if not exists fin_loan_payments (
   note text
 );
 
+-- Flex-inkomsten via backoffice (Pronkert): 1 regel per week
+create table if not exists fin_flex_weken (
+  id bigint generated always as identity primary key,
+  week date not null unique,                -- maandag van de week
+  bedrag numeric not null default 0,        -- uitgekeerde marge excl. btw
+  flexkrachten int,                         -- aantal actieve flexkrachten (optioneel)
+  note text
+);
+
 -- Instellingen (key/value)
 create table if not exists fin_settings (
   key text primary key,
@@ -121,7 +130,7 @@ begin
   foreach t in array array[
     'fin_placements','fin_installments','fin_costs_budget','fin_costs_actual',
     'fin_bank_saldo','fin_bank_tx','fin_loans','fin_loan_payments',
-    'fin_settings','fin_dismissed_candidates']
+    'fin_settings','fin_dismissed_candidates','fin_flex_weken']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists fin_owner_only on %I', t);

@@ -91,7 +91,7 @@ function openCsvImport() {
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const sc = scenarioState || (scenarioState = {
-    omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true,
+    omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
   });
   const proj = projectie(12, sc);
   const saldo = D.saldi[0];
@@ -106,7 +106,7 @@ function renderCashflow(root) {
 
   const tabel = proj.rows.map(r => `<tr>
     <td>${esc(r.label)}</td>
-    <td class="num">${eur(r.inFact)}</td><td class="num muted">${eur(r.inScenario)}</td>
+    <td class="num">${eur(r.inFact)}</td><td class="num" style="color:var(--purple)">${r.inFlex ? eur(r.inFlex) : '—'}</td><td class="num muted">${eur(r.inScenario)}</td>
     <td class="num">${eur(r.uitKosten)}</td><td class="num">${r.uitBtw ? eur(r.uitBtw) : '—'}</td><td class="num">${r.uitLening ? eur(r.uitLening) : '—'}</td>
     <td class="num"><b style="color:${r.saldo < 0 ? 'var(--red)' : r.saldo < 10000 ? 'var(--amber)' : 'var(--green)'}">${eur(r.saldo)}</b></td></tr>`).join('');
 
@@ -135,6 +135,8 @@ function renderCashflow(root) {
           <input type="range" id="sc_omzet" min="0" max="60000" step="1000" value="${sc.omzetPm}"><b>${eur(sc.omzetPm)}</b></div>
         <div class="slider-row"><span>Omzet valt terug met</span>
           <input type="range" id="sc_dip" min="0" max="100" step="5" value="${sc.omzetDipPct * 100}"><b>${Math.round(sc.omzetDipPct * 100)}%</b></div>
+        <div class="slider-row"><span>Flex-marge (t.o.v. run-rate)</span>
+          <input type="range" id="sc_flex" min="0" max="300" step="10" value="${sc.flexFactor * 100}"><b>${Math.round(sc.flexFactor * 100)}%</b></div>
         <div class="slider-row"><span>Extra hire (kosten p/m)</span>
           <input type="range" id="sc_hire" min="0" max="8000" step="250" value="${sc.extraHirePm}"><b>${eur(sc.extraHirePm)}</b></div>
         <div class="slider-row"><span>Hire start in</span>
@@ -156,7 +158,7 @@ function renderCashflow(root) {
     </div>
 
     <div class="panel table-wrap"><h2>Maandtabel</h2><table>
-      <tr><th>Maand</th><th class="num">In: facturen</th><th class="num">In: scenario</th><th class="num">Uit: kosten</th><th class="num">Btw-afdracht</th><th class="num">Aflossing</th><th class="num">Saldo</th></tr>
+      <tr><th>Maand</th><th class="num">In: facturen</th><th class="num">In: flex</th><th class="num">In: scenario</th><th class="num">Uit: kosten</th><th class="num">Btw-afdracht</th><th class="num">Aflossing</th><th class="num">Saldo</th></tr>
       ${tabel}</table>
       <p class="muted mt">Facturen incl. btw, op verwachte betaaldatum (geplande factuurdatum + betaaltermijn). Te late betalingen: aanname binnen 2 weken. Btw-afdracht per kwartaal, minus geschatte voorbelasting (${eur(S('voorbelasting_pm', 0))}/mnd — instelbaar).</p>
     </div>`;
@@ -164,6 +166,7 @@ function renderCashflow(root) {
   const upd = () => { rerender(); };
   $('#sc_omzet').oninput = e => { sc.omzetPm = +e.target.value; upd(); };
   $('#sc_dip').oninput = e => { sc.omzetDipPct = +e.target.value / 100; upd(); };
+  $('#sc_flex').oninput = e => { sc.flexFactor = +e.target.value / 100; upd(); };
   $('#sc_hire').oninput = e => { sc.extraHirePm = +e.target.value; upd(); };
   $('#sc_hireVanaf').onchange = e => { sc.extraHireVanaf = +e.target.value; upd(); };
   $('#sc_afl').onchange = e => { sc.aflossenAan = e.target.checked; upd(); };

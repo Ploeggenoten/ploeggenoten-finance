@@ -2,8 +2,10 @@
 
 const VIEWS = {
   vandaag: renderVandaag,
+  advies: renderAdvies,
   plaatsingen: renderPlaatsingen,
   facturatie: renderFacturatie,
+  flex: renderFlex,
   cashflow: renderCashflow,
   kosten: renderKosten,
   instellingen: renderInstellingen,

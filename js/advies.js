@@ -1,0 +1,195 @@
+// ═══ ADVIES-ENGINE: denkt als een financieel adviseur in recruitment ═══
+// Elke regel is een heuristiek met drempels zoals een branche-adviseur die hanteert.
+// Categorieën: gevaar | kans | sterkte. urg: 3 = direct aandacht, 1 = goed om te weten.
+
+function adviesEngine() {
+  const items = [];
+  const t = todayISO(), mk = monthKey(t), mnd = +t.slice(5, 7);
+  const k = kpis(), con = concentratie(), pot = potjes(), fx = flexStats();
+  const proj = projectie(12, { flexFactor: 1 });
+  const vaste = budgetVoorMaand(mk);
+  const saldo = D.saldi[0] ? +D.saldi[0].saldo : 0;
+  const vrij = saldo - pot.btwPot - pot.vpbPot;
+  const add = (cat, urg, titel, cijfer, tekst, actie) => items.push({ cat, urg, titel, cijfer, tekst, actie });
+
+  // maanden sinds eerste contract (voor run-rates)
+  const eerste = D.placements.map(p => p.contract_datum).filter(Boolean).sort()[0];
+  const mndActief = eerste ? Math.max(1, (daysBetween(eerste, t) / 30.4)) : 1;
+  const plPm = D.placements.length / mndActief;
+  const gemFee = k.gemFee || (D.placements.length ? D.placements.reduce((s, p) => s + +(p.fee_excl || 0), 0) / D.placements.length : 0);
+  const breakEvenPl = gemFee ? vaste / gemFee : null;
+  const flexDekking = vaste ? fx.maandRunRate / vaste : 0;
+
+  // ── GEVAREN ──────────────────────────────────────────────────
+  const buffer = vaste ? vrij / vaste : 0;
+  if (buffer < 3) add('gevaar', 3, 'Cashbuffer onder de branchenorm', buffer.toFixed(1) + ' mnd',
+    `Vrij besteedbaar (na btw/Vpb-potjes) is ${eur(vrij)} — dat dekt ${buffer.toFixed(1)} maand vaste lasten (${eur(vaste)}/m). Adviseurs hanteren voor W&S-bureaus minimaal 3, liever 6 maanden: omzet is eenmalig en valt in vakantieperiodes stil.`,
+    `Bouw de buffer naar minimaal ${eur(vaste * 3)}. Stel grote uitgaven en extra aflossingen uit tot je daar zit.`);
+
+  const btwRow = proj.rows.find(r => r.uitBtw > 0);
+  if (btwRow && btwRow.uitBtw > Math.max(5000, saldo * .15))
+    add('gevaar', btwRow.uitBtw > vrij * .5 ? 3 : 2, 'Btw-klap in aantocht', eur(btwRow.uitBtw) + ' · ' + btwRow.label,
+      `In ${btwRow.label} moet er ${eur(btwRow.uitBtw)} btw worden afgedragen. Dit is geen winst maar doorgeefgeld — toch verdampt hier menig bureau zijn "buffer" aan.`,
+      `Zet het btw-potje (${eur(pot.btwPot)} en groeiend) apart, bijv. op een spaarrekening, en raak het niet aan.`);
+
+  if (con.top1 && con.top1.aandeel > .25) {
+    const nogTeFact = D.placements.filter(p => p.klant === con.top1.klant)
+      .reduce((s, p) => s + placementStats(p).nog + placementStats(p).open, 0);
+    add('gevaar', con.top1.aandeel > .35 ? 3 : 2, 'Klantconcentratie te hoog', pct(con.top1.aandeel) + ' bij ' + con.top1.klant,
+      `${con.top1.klant} is ${pct(con.top1.aandeel)} van je pijplijn (norm: geen klant boven 25–30%). Er staat daar nog ${eur(nogTeFact)} open of te factureren. Eén vacaturestop of conflict raakt je direct — en het maakt je onaantrekkelijk bij financiering.`,
+      `Maak spreiding een target: de volgende ${Math.ceil(D.placements.length * .3)} plaatsingen bij andere klanten. Gebruik de goede naam bij ${con.top1.klant} als referentie voor soortgelijke bedrijven.`);
+    if (con.top3 > .7) add('gevaar', 2, 'Top-3 klanten dragen bijna alles', pct(con.top3),
+      `Je drie grootste klanten zijn samen ${pct(con.top3)} van de pijplijn.`,
+      `Richt acquisitie op minimaal 2 nieuwe logo's per kwartaal.`);
+  }
+
+  const teLaat = acties().filter(a => a.soort === 'te_laat');
+  if (teLaat.length) {
+    const bedrag = teLaat.reduce((s, a) => s + +(a.i?.bedrag_excl || 0), 0);
+    add('gevaar', 2, 'Betalingen lopen achter', `${teLaat.length}× · ${eur(bedrag)}`,
+      `${teLaat.length} facturen (${eur(bedrag)} excl. btw) zijn over de vervaldatum. In recruitment went een klant snel aan te laat betalen — en jij financiert het.`,
+      `Vast belritme: dag 1 na vervallen een vriendelijke mail, dag 7 bellen. Overweeg bij nieuwe klanten 50% bij tekenen.`);
+  }
+
+  if (k.stopPct > .2) add('gevaar', 2, 'Hoog uitvalpercentage kandidaten', pct(k.stopPct) + ' gestopt',
+    `${pct(k.stopPct)} van je plaatsingen stopt — je verloor al ${eur(k.vervallen)} aan vervallen termijnen. In productie/logistiek valt het meeste uit in de eerste 30 dagen.`,
+    `Bel kandidaat én klant standaard na dag 3, 14 en 30. Kleine moeite, en het beschermt je gespreide termijnen — juist die maken uitval duur.`);
+
+  const kw3 = proj.rows.slice(0, 3);
+  const dekking3m = kw3.reduce((s, r) => s + r.inFact + r.inFlex, 0) / Math.max(1, kw3.reduce((s, r) => s + r.uitTot, 0));
+  if (dekking3m < 1) add('gevaar', 2, 'Komende 3 maanden niet gedekt zonder nieuwe deals', Math.round(dekking3m * 100) + '% gedekt',
+    `Het bestaande factuurschema + flex dekt ${Math.round(dekking3m * 100)}% van de verwachte uitgaven de komende 3 maanden. Zonder nieuwe plaatsingen teer je in op je buffer.`,
+    `Plan het aantal deals dat het gat dicht: bij een gemiddelde fee van ${eur(gemFee)} is dat er ${Math.ceil((kw3.reduce((s, r) => s + r.uitTot, 0) - kw3.reduce((s, r) => s + r.inFact + r.inFlex, 0)) / Math.max(1, gemFee))} in dit kwartaal.`);
+
+  const rcTve = D.loans.find(l => /tve/i.test(l.naam));
+  if (rcTve) add('gevaar', 1, 'Rekening-courant TVE loopt op', eur(rcTve.hoofdsom) + '+',
+    `Je management fee wordt opgeboekt in RC (±€4.300/m) in plaats van uitbetaald. Fiscaal kan een oplopende RC-DGA door de Belastingdienst als (verkapte) uitdeling worden gezien.`,
+    `Bespreek met je boekhouder: periodiek uitkeren, verrekenen, of een RC-overeenkomst met rente vastleggen.`);
+
+  if (mnd === 6 || mnd === 7) add('gevaar', 1, 'Zomerdip W&S komt eraan', 'jul–aug',
+    `Beslissers zijn op vakantie: deals die nu niet rond zijn schuiven zes weken door. Klassieke valkuil: in september pas weer zaaien en in oktober-november omzetgat.`,
+    `Vul de pijplijn nú voor september; plan interviews vóór de vakanties. Flex loopt wél door — extra reden die tak te voeden.`);
+  if (mnd === 10 || mnd === 11) add('gevaar', 1, 'December-effect', 'nov–dec',
+    `Budgetten zijn op en niemand start vlak voor de feestdagen; januari is juist piekmaand (nieuwe budgetten, jobswitch-golf).`,
+    `Verkoop nu startdata in januari en zorg dat facturatie vóór de jaarwisseling de deur uit is.`);
+
+  if (fx.maandRunRate === 0)
+    add('gevaar', 2, 'Alle omzet is eenmalig', '0% recurring',
+      `Zonder flex-inkomsten begint elke maand op nul: W&S-fees zijn eenmalig. Dat maakt je kwetsbaar voor een stille maand.`,
+      `Bouw de flexpoot via Pronkert uit — elke flexkracht is wekelijkse marge die je vaste lasten draagt. Vul de weekbedragen in op het Flex-tabblad zodra ze binnenkomen.`);
+
+  // ── KANSEN ───────────────────────────────────────────────────
+  if (buffer > 6) {
+    const overschot = vrij - vaste * 6;
+    const moeder = D.loans.find(l => /moeder/i.test(l.naam));
+    const opties = [];
+    if (moeder) opties.push(`de lening van je moeder (deels) aflossen bespaart ${moeder.rente_pct}% = ${eur((moeder.hoofdsom) * moeder.rente_pct / 100)}/jaar aan rente`);
+    opties.push(`een extra recruiter (±${eur(4300)}/m) is al rendabel bij ${(4300 / Math.max(1, gemFee)).toFixed(1)} plaatsing per maand`);
+    opties.push(`advertentiebudget opschalen (zie kans hieronder)`);
+    add('kans', 2, 'Overtollige cash aan het werk zetten', eur(overschot) + ' boven norm',
+      `Je zit ${eur(overschot)} boven de 6-maands buffernorm. Geld op de betaalrekening rendeert niet.`,
+      `Opties: ${opties.join('; ')}.`);
+  }
+
+  const mktBudget = D.budget.find(b => /marketing|verkoop/i.test(b.categorie));
+  if (mktBudget && plPm > 0) {
+    const cpp = +mktBudget.bedrag_pm / plPm;
+    if (cpp < gemFee * .3) add('kans', 2, 'Marketing rendeert — overweeg opschalen', `${eur(cpp)} per plaatsing`,
+      `Je geeft ±${eur(mktBudget.bedrag_pm)}/m uit aan marketing en doet ${plPm.toFixed(1)} plaatsingen/m → ${eur(cpp)} per plaatsing, tegen een gemiddelde fee van ${eur(gemFee)}. Een verhouding onder de 30% is ruimte om te schalen.`,
+      `Test +50% advertentiebudget voor één kwartaal en meet of de cost-per-placement onder ${eur(gemFee * .3)} blijft.`);
+  }
+
+  // cash naar voren halen: hoeveel van 'nog te factureren' zit verder dan 60 dagen weg?
+  const ver = D.installments.filter(i => i.status === 'te_factureren' && i.geplande_datum && daysBetween(t, i.geplande_datum) > 60)
+    .reduce((s, i) => s + +i.bedrag_excl, 0);
+  if (ver > k.nogTeFactureren * .4 && ver > 5000)
+    add('kans', 2, 'Veel omzet zit ver in de toekomst', eur(ver) + ' > 60 dgn',
+      `${eur(ver)} van je ${eur(k.nogTeFactureren)} nog te factureren staat meer dan 2 maanden weg (gespreide termijnen). Jij financiert feitelijk je klanten.`,
+      `Nieuwe deals: 50% bij tekenen, rest gespreid. Bestaande spreidingen: bied 3% korting bij ineens voldoen — vaak goedkoper dan je eigen wachttijd.`);
+
+  if (gemFee && gemFee < 8000) add('kans', 2, 'Gemiddelde fee onder benchmark', eur(gemFee),
+    `Voor productie/logistiek is 20–25% van het bruto jaarsalaris (±€38–45k) gangbaar: €7.600–11.000 per plaatsing. Jij zit op ${eur(gemFee)}.`,
+    `Verhoog je tarief bij nieuwe klanten; onderbouw met schaarste en je garantieregeling.`);
+
+  if (fx.maandRunRate > 0 && flexDekking < 1) {
+    const perKracht = fx.laatste?.flexkrachten ? fx.avg4 / fx.laatste.flexkrachten : null;
+    add('kans', 2, 'Flex kan je vaste lasten dragen', pct(flexDekking) + ' gedekt',
+      `Flex levert nu ${eur(fx.maandRunRate)}/m (run-rate) — dat dekt ${pct(flexDekking)} van je vaste lasten (${eur(vaste)}).${perKracht ? ` Gemiddeld is dat ${eur(perKracht)}/week per flexkracht.` : ''}`,
+      `${perKracht ? `Met ±${Math.ceil((vaste - fx.maandRunRate) / (perKracht * 52 / 12))} extra flexkrachten` : 'Met meer flexkrachten'} draaien je vaste lasten volledig op recurring marge — dan is elke W&S-fee pure winst.`);
+  }
+
+  const perKlant = {};
+  D.placements.forEach(p => perKlant[p.klant] = (perKlant[p.klant] || 0) + 1);
+  const repeat = Object.values(perKlant).filter(n => n > 1).length;
+  const totKlant = Object.keys(perKlant).length;
+  if (totKlant >= 4 && repeat / totKlant >= .4)
+    add('kans', 1, 'Sterke herhaalklanten — verzilver dat', `${repeat}/${totKlant} klanten`,
+      `${repeat} van je ${totKlant} klanten plaatste meer dan eens. Terugkerende klanten zijn je goedkoopste omzet.`,
+      `Bied je top-klanten een raamafspraak: vast tarief of staffelkorting in ruil voor exclusiviteit of een volumecommitment.`);
+
+  // ── STERKTES ─────────────────────────────────────────────────
+  if (pot.omzetYtd > 0) {
+    const marge = pot.winstYtd / Math.max(1, pot.omzetYtd);
+    if (marge > .35) add('sterkte', 1, 'Uitstekende winstmarge', pct(marge),
+      `Winst-indicatie ${eur(pot.winstYtd)} op ${eur(pot.omzetYtd)} omzet. Boven de 35% is voor een W&S-bureau zeer gezond (veel bureaus blijven onder 20%).`, null);
+  }
+  if (buffer >= 3 && buffer <= 6) add('sterkte', 1, 'Gezonde cashbuffer', buffer.toFixed(1) + ' mnd vaste lasten', `Vrij besteedbaar dekt ${buffer.toFixed(1)} maanden — netjes binnen de 3–6-norm.`, null);
+  if (k.dso != null && k.dso <= 21) add('sterkte', 1, 'Klanten betalen vlot', k.dso + ' dgn DSO', `Gemiddelde betaalduur van ${k.dso} dagen is uitstekend (branche zit vaak op 40+).`, null);
+  if (gemFee >= 8000) add('sterkte', 1, 'Fee-niveau op/boven benchmark', eur(gemFee) + ' gem.', `Je gemiddelde fee zit in de bovenkant van de markt voor productie & logistiek.`, null);
+  if (fx.maandRunRate > 0 && flexDekking >= 1) add('sterkte', 2, 'Vaste lasten volledig gedekt door flex', pct(flexDekking),
+    `Je flex-marge (${eur(fx.maandRunRate)}/m) dekt al je vaste lasten. Elke W&S-fee is daarmee winst — een luxepositie.`, null);
+  if (k.stopPct <= .1 && D.placements.length >= 10) add('sterkte', 1, 'Lage uitval', pct(k.stopPct), `Je kandidaten blijven zitten — dat zegt iets over je matching én het beschermt je gespreide termijnen.`, null);
+
+  return items.sort((a, b) => b.urg - a.urg);
+}
+
+// kerncijfers zoals een adviseur ze op een A4 zet
+function adviseurCijfers() {
+  const t = todayISO(), k = kpis(), con = concentratie(), pot = potjes(), fx = flexStats();
+  const proj = projectie(12, { flexFactor: 1 });
+  const vaste = budgetVoorMaand(monthKey(t));
+  const saldo = D.saldi[0] ? +D.saldi[0].saldo : 0;
+  const vrij = saldo - pot.btwPot - pot.vpbPot;
+  const eerste = D.placements.map(p => p.contract_datum).filter(Boolean).sort()[0];
+  const mndActief = eerste ? Math.max(1, daysBetween(eerste, t) / 30.4) : 1;
+  return [
+    ['Vaste lasten p/m', eur(vaste), 'incl. fee & lonen (budget)'],
+    ['Break-even', (vaste / Math.max(1, k.gemFee)).toFixed(1) + ' plaatsingen/m', `bij gem. fee ${eur(k.gemFee)}`],
+    ['Run-rate', (D.placements.length / mndActief).toFixed(1) + ' plaatsingen/m', `${D.placements.length} sinds ${fmtD(eerste)}`],
+    ['Cashbuffer', (vaste ? (vrij / vaste).toFixed(1) : '—') + ' mnd', `vrij besteedbaar ${eur(vrij)} / norm 3–6 mnd`],
+    ['Runway (zonder nieuwe W&S)', (proj.runway >= 12 ? '12+' : proj.runway) + ' mnd', 'factuurschema + flex − kosten'],
+    ['DSO', k.dso == null ? '—' : k.dso + ' dgn', 'gem. dagen factuur → betaald'],
+    ['Uitval', pct(k.stopPct), `${eur(k.vervallen)} vervallen omzet`],
+    ['Grootste klant', con.top1 ? pct(con.top1.aandeel) : '—', con.top1 ? con.top1.klant + ' (norm < 25–30%)' : ''],
+    ['Flex-dekkingsgraad', vaste ? pct(fx.maandRunRate / vaste) : '—', `${eur(fx.maandRunRate)}/m recurring vs vaste lasten`],
+    ['Btw + Vpb opzij te zetten', eur(pot.btwPot + pot.vpbPot), 'zit nog "verstopt" in je banksaldo'],
+  ];
+}
+
+function renderAdvies(root) {
+  const items = adviesEngine();
+  const cijfers = adviseurCijfers();
+  const iconOf = { gevaar: '🔴', kans: '🟡', sterkte: '🟢' };
+  const kaart = it => `<div class="actie ${it.urg === 3 ? 'urgent' : it.urg === 2 ? 'warn' : ''}" style="align-items:flex-start">
+    <div class="ico">${iconOf[it.cat]}</div>
+    <div class="body">
+      <b>${esc(it.titel)} <span class="tag ${it.cat === 'gevaar' ? 'red' : it.cat === 'kans' ? 'amber' : 'green'}">${esc(it.cijfer || '')}</span></b>
+      <span>${esc(it.tekst)}</span>
+      ${it.actie ? `<span style="color:var(--txt);display:block;margin-top:4px">👉 ${esc(it.actie)}</span>` : ''}
+    </div></div>`;
+  const sectie = (cat, titel) => {
+    const xs = items.filter(i => i.cat === cat);
+    return `<div class="panel mb"><h2>${titel} <span class="muted">(${xs.length})</span></h2>
+      ${xs.map(kaart).join('') || '<div class="empty">Niets gevonden — dat is hier goed nieuws.</div>'}</div>`;
+  };
+  root.innerHTML = `
+    <h1>Advies · je financieel adviseur</h1>
+    <div class="muted mb">Live berekend uit je eigen cijfers, met branchenormen voor werving & selectie + flex. Elke kaart: wat er speelt, waarom het telt, en wat een adviseur zou doen.</div>
+    <div class="panel mb"><h2>📐 De cijfers die een adviseur checkt</h2>
+      <div class="table-wrap"><table>
+      ${cijfers.map(([l, v, s]) => `<tr><td>${esc(l)}</td><td class="num"><b>${esc(v)}</b></td><td class="muted">${esc(s)}</td></tr>`).join('')}
+      </table></div></div>
+    ${sectie('gevaar', '🔴 Gevaren')}
+    ${sectie('kans', '🟡 Kansen')}
+    ${sectie('sterkte', '🟢 Sterktes')}`;
+}

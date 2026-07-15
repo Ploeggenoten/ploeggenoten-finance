@@ -7,6 +7,7 @@ function renderVandaag(root) {
   const lijst = acties();
   const proj = projectie(12);
 
+  const fx = flexStats();
   const kpiHtml = `
   <div class="grid cols-4">
     <div class="kpi"><div class="lbl">Banksaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div>
@@ -14,11 +15,12 @@ function renderVandaag(root) {
       <div class="sub">vrij besteedbaar na potjes: <b>${vrij == null ? '—' : eur(vrij)}</b></div></div>
     <div class="kpi ${k.openstaand > 0 ? 'warn' : ''}"><div class="lbl">Openstaand (gefact., niet betaald)</div>
       <div class="val">${eur(k.openstaand)}</div><div class="sub">excl. btw</div></div>
-    <div class="kpi"><div class="lbl">Nog te factureren</div>
-      <div class="val">${eur(k.nogTeFactureren)}</div><div class="sub">uit lopend factuurschema</div></div>
     <div class="kpi"><div class="lbl">Gefactureerd deze maand</div>
       <div class="val">${eur(k.omzetDezeMaand)}</div>
-      <div class="sub">${S('target_omzet_pm') ? 'target ' + eur(S('target_omzet_pm')) : 'nog geen target ingesteld'}</div></div>
+      <div class="sub">${S('target_omzet_pm') ? 'target ' + eur(S('target_omzet_pm')) : 'nog te factureren: ' + eur(k.nogTeFactureren)}</div></div>
+    <div class="kpi"><div class="lbl">Flex (run-rate p/m)</div>
+      <div class="val">${fx.maandRunRate ? eur(fx.maandRunRate) : '—'}</div>
+      <div class="sub">${fx.laatste ? 'laatste week ' + eur(fx.laatste.bedrag) : 'nog geen weken ingevoerd'}</div></div>
   </div>`;
 
   const actieHtml = lijst.length ? lijst.map((a, idx) => {
@@ -52,12 +54,12 @@ function renderVandaag(root) {
     <div class="pot"><span>Samen opzij te zetten</span><b>${eur(pot.btwPot + pot.vpbPot)}</b></div>
     <div class="pot"><span>Winst-indicatie YTD</span><b>${eur(pot.winstYtd)}</b></div>`;
 
-  const adviezen = [];
-  if (proj.negatief) adviezen.push(`🔴 In dit scenario komt je saldo in <b>${esc(proj.negatief.label)}</b> onder nul. Kijk op Cashflow welke knop het verschil maakt.`);
-  else adviezen.push(`🟢 Laagste punt komende 12 mnd: <b>${eur(proj.laagste.saldo)}</b> in ${esc(proj.laagste.label)}.`);
-  adviezen.push(`Zonder nieuwe omzet houd je het <b>${proj.runway >= 12 ? '12+' : proj.runway} maanden</b> vol (runway op huidig factuurschema).`);
-  if (con.top1 && con.top1.aandeel > .35) adviezen.push(`⚠ <b>${esc(con.top1.klant)}</b> is ${pct(con.top1.aandeel)} van je pijplijn — één opzegging raakt je hard. Spreiden loont.`);
-  if (k.openstaand > 0) adviezen.push(`Er staat <b>${eur(k.openstaand)}</b> (excl. btw) gefactureerd open — bel na wat te laat is.`);
+  const top = adviesEngine().filter(a => a.urg >= 2).slice(0, 4);
+  const iconOf = { gevaar: '🔴', kans: '🟡', sterkte: '🟢' };
+  const adviesHtml = (top.length ? top.map(a =>
+    `<div class="pot"><span>${iconOf[a.cat]} <b>${esc(a.titel)}</b> — ${esc(a.cijfer || '')}<br><span class="muted">${esc(a.actie || a.tekst)}</span></span></div>`).join('')
+    : `<div class="pot"><span>🟢 Geen urgente signalen. Laagste saldopunt komende 12 mnd: <b>${eur(proj.laagste.saldo)}</b> (${esc(proj.laagste.label)}).</span></div>`)
+    + `<div class="mt right"><button class="btn small" id="naarAdvies">Alle adviezen →</button></div>`;
 
   root.innerHTML = `
     <h1>Vandaag · ${fmtD(todayISO())}</h1>
@@ -66,11 +68,12 @@ function renderVandaag(root) {
     <div class="grid cols-2 mt">
       <div class="panel"><h2>📌 Acties</h2>${actieHtml}</div>
       <div>
-        <div class="panel mb"><h2>🧠 Advies van je finance agent</h2>${adviezen.map(a => `<div class="pot"><span>${a}</span></div>`).join('')}</div>
+        <div class="panel mb"><h2>🧠 Advies van je finance agent</h2>${adviesHtml}</div>
         <div class="panel mb"><h2>💰 Belastingpotjes</h2>${potHtml}</div>
         <div class="panel"><h2>⚠️ Risico's</h2>${risicoHtml}</div>
       </div>
     </div>`;
+  $('#naarAdvies').onclick = () => switchView('advies');
 
   root.addEventListener('click', async e => {
     const b = e.target.closest('[data-act]');
