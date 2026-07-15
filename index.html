@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ploeggenoten · Finance</title>
 <meta name="robots" content="noindex">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💶</text></svg>">
+<link rel="icon" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
 </head>
@@ -14,7 +17,7 @@
 <!-- ── LOGIN ─────────────────────────────────────────────── -->
 <div id="loginScreen" class="login-wrap">
   <div class="login-card">
-    <div class="brand">PLOEGGENOTEN</div>
+    <img class="login-logo" src="assets/logo-lime.png" alt="Ploeggenoten">
     <div class="brand-sub">Finance · alleen voor Tjeerd</div>
     <input id="loginEmail" type="email" placeholder="E-mailadres" autocomplete="username" value="tjeerd@ploeggenoten.nl">
     <input id="loginPass" type="password" placeholder="Wachtwoord" autocomplete="current-password">
@@ -26,7 +29,7 @@
 <!-- ── APP ───────────────────────────────────────────────── -->
 <div id="app" style="display:none">
   <header class="topbar">
-    <div class="brand-small">PLOEGGENOTEN <span>FINANCE</span></div>
+    <div class="brand-small"><img src="assets/logo-lime.png" alt="Ploeggenoten"><span>Finance</span></div>
     <nav id="nav">
       <button data-view="vandaag" class="nav-btn active">Vandaag</button>
       <button data-view="advies" class="nav-btn">Advies</button>
