@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ploeggenoten · Finance</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💶</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<!-- ── LOGIN ─────────────────────────────────────────────── -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="brand">PLOEGGENOTEN</div>
+    <div class="brand-sub">Finance · alleen voor Tjeerd</div>
+    <input id="loginEmail" type="email" placeholder="E-mailadres" autocomplete="username" value="tjeerd@ploeggenoten.nl">
+    <input id="loginPass" type="password" placeholder="Wachtwoord" autocomplete="current-password">
+    <button id="loginBtn" class="btn primary wide">Inloggen</button>
+    <div id="loginMsg" class="login-msg"></div>
+  </div>
+</div>
+
+<!-- ── APP ───────────────────────────────────────────────── -->
+<div id="app" style="display:none">
+  <header class="topbar">
+    <div class="brand-small">PLOEGGENOTEN <span>FINANCE</span></div>
+    <nav id="nav">
+      <button data-view="vandaag" class="nav-btn active">Vandaag</button>
+      <button data-view="plaatsingen" class="nav-btn">Plaatsingen</button>
+      <button data-view="facturatie" class="nav-btn">Facturatie</button>
+      <button data-view="cashflow" class="nav-btn">Cashflow</button>
+      <button data-view="kosten" class="nav-btn">Kosten</button>
+      <button data-view="instellingen" class="nav-btn">Instellingen</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="syncDot" class="sync-dot" title="Verbonden"></span>
+      <button id="logoutBtn" class="btn ghost small">Uitloggen</button>
+    </div>
+  </header>
+
+  <main id="viewRoot"></main>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script src="js/config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/calc.js"></script>
+<script src="js/vandaag.js"></script>
+<script src="js/plaatsingen.js"></script>
+<script src="js/facturatie.js"></script>
+<script src="js/cashflow.js"></script>
+<script src="js/kosten.js"></script>
+<script src="js/instellingen.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
