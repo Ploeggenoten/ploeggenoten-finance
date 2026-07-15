@@ -88,28 +88,51 @@ function openCsvImport() {
   };
 }
 
-// ── hoofdview ──────────────────────────────────────────────────
-function renderCashflow(root) {
-  const sc = scenarioState || (scenarioState = {
-    omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
-  });
+// dynamische delen (KPI's, grafiek, maandtabel) — apart zodat de
+// scenario-schuiven alleen dít herbouwen en niet zichzelf (anders breekt het slepen)
+function cfDynHtml(sc) {
   const proj = projectie(12, sc);
   const saldo = D.saldi[0];
   const pot = potjes();
-  const lening = D.loans[0];
-  const afgelost = D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0);
 
   const chart = lineChart(proj.rows.map(r => r.label), [
     { label: 'Banksaldo (scenario)', color: 'var(--accent)', values: proj.rows.map(r => r.saldo) },
     { label: 'Vrij besteedbaar (na potjes)', color: 'var(--green)', values: proj.rows.map(r => r.saldo - pot.btwPot - pot.vpbPot) },
   ], { height: 260 });
 
-  const tabel = proj.rows.map(r => `<tr>
+  return `
+    <div class="grid cols-4 mb">
+      <div class="kpi"><div class="lbl">Startsaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div><div class="val">${saldo ? eur(saldo.saldo) : '—'}</div></div>
+      <div class="kpi ${proj.laagste.saldo < 0 ? 'bad' : proj.laagste.saldo < 10000 ? 'warn' : 'good'}">
+        <div class="lbl">Laagste punt (12 mnd)</div><div class="val">${eur(proj.laagste.saldo)}</div><div class="sub">${esc(proj.laagste.label || '')}</div></div>
+      <div class="kpi"><div class="lbl">Runway zónder nieuwe W&S</div><div class="val">${proj.runway >= 12 ? '12+' : proj.runway} mnd</div><div class="sub">factuurschema + flex − kosten</div></div>
+      <div class="kpi"><div class="lbl">Eindsaldo over 12 mnd</div><div class="val">${eur(proj.rows[proj.rows.length - 1].saldo)}</div><div class="sub">in dit scenario</div></div>
+    </div>
+
+    <div class="panel mb"><h2>📈 Saldo-projectie</h2>${chart}</div>`;
+}
+
+function cfTabelHtml(sc) {
+  const proj = projectie(12, sc);
+  const rows = proj.rows.map(r => `<tr>
     <td>${esc(r.label)}</td>
     <td class="num">${eur(r.inFact)}</td><td class="num" style="color:var(--purple)">${r.inFlex ? eur(r.inFlex) : '—'}</td><td class="num muted">${eur(r.inScenario)}</td>
     <td class="num">${eur(r.uitKosten)}</td><td class="num">${r.uitBtw ? eur(r.uitBtw) : '—'}</td><td class="num">${r.uitLening ? eur(r.uitLening) : '—'}</td>
     <td class="num"><b style="color:${r.saldo < 0 ? 'var(--red)' : r.saldo < 10000 ? 'var(--amber)' : 'var(--green)'}">${eur(r.saldo)}</b></td></tr>`).join('');
+  return `<h2>Maandtabel</h2><table>
+      <tr><th>Maand</th><th class="num">In: facturen</th><th class="num">In: flex</th><th class="num">In: scenario</th><th class="num">Uit: kosten</th><th class="num">Btw-afdracht</th><th class="num">Aflossing</th><th class="num">Saldo</th></tr>
+      ${rows}</table>
+      <p class="muted mt">Facturen incl. btw, op verwachte betaaldatum (geplande factuurdatum + betaaltermijn). Te late betalingen: aanname binnen 2 weken. Btw-afdracht per kwartaal, minus geschatte voorbelasting (${eur(S('voorbelasting_pm', 0))}/mnd — instelbaar).</p>`;
+}
 
+// ── hoofdview ──────────────────────────────────────────────────
+function renderCashflow(root) {
+  const sc = scenarioState || (scenarioState = {
+    omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
+  });
+  const proj = projectie(12, sc);
+  const lening = D.loans[0];
+  const afgelost = D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0);
   const maandOpts = proj.rows.map((r, i) => `<option value="${i}" ${i === sc.extraHireVanaf ? 'selected' : ''}>${esc(r.label)}</option>`).join('');
 
   root.innerHTML = `
@@ -119,26 +142,18 @@ function renderCashflow(root) {
         <button class="btn primary" id="cfSaldo">🏦 Saldo bijwerken</button>
       </div></div>
 
-    <div class="grid cols-4 mb">
-      <div class="kpi"><div class="lbl">Startsaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div><div class="val">${saldo ? eur(saldo.saldo) : '—'}</div></div>
-      <div class="kpi ${proj.laagste.saldo < 0 ? 'bad' : proj.laagste.saldo < 10000 ? 'warn' : 'good'}">
-        <div class="lbl">Laagste punt (12 mnd)</div><div class="val">${eur(proj.laagste.saldo)}</div><div class="sub">${esc(proj.laagste.label || '')}</div></div>
-      <div class="kpi"><div class="lbl">Runway zónder nieuwe omzet</div><div class="val">${proj.runway >= 12 ? '12+' : proj.runway} mnd</div><div class="sub">op huidig factuurschema</div></div>
-      <div class="kpi"><div class="lbl">Eindsaldo over 12 mnd</div><div class="val">${eur(proj.rows[proj.rows.length - 1].saldo)}</div><div class="sub">in dit scenario</div></div>
-    </div>
-
-    <div class="panel mb"><h2>📈 Saldo-projectie</h2>${chart}</div>
+    <div id="cfDyn">${cfDynHtml(sc)}</div>
 
     <div class="grid cols-2 mb">
       <div class="panel"><h2>🎛 Scenario-knoppen</h2>
         <div class="slider-row"><span>Nieuwe omzet p/m</span>
-          <input type="range" id="sc_omzet" min="0" max="60000" step="1000" value="${sc.omzetPm}"><b>${eur(sc.omzetPm)}</b></div>
+          <input type="range" id="sc_omzet" min="0" max="60000" step="1000" value="${sc.omzetPm}"><b id="scv_omzet">${eur(sc.omzetPm)}</b></div>
         <div class="slider-row"><span>Omzet valt terug met</span>
-          <input type="range" id="sc_dip" min="0" max="100" step="5" value="${sc.omzetDipPct * 100}"><b>${Math.round(sc.omzetDipPct * 100)}%</b></div>
+          <input type="range" id="sc_dip" min="0" max="100" step="5" value="${sc.omzetDipPct * 100}"><b id="scv_dip">${Math.round(sc.omzetDipPct * 100)}%</b></div>
         <div class="slider-row"><span>Flex-marge (t.o.v. run-rate)</span>
-          <input type="range" id="sc_flex" min="0" max="300" step="10" value="${sc.flexFactor * 100}"><b>${Math.round(sc.flexFactor * 100)}%</b></div>
+          <input type="range" id="sc_flex" min="0" max="300" step="10" value="${sc.flexFactor * 100}"><b id="scv_flex">${Math.round(sc.flexFactor * 100)}%</b></div>
         <div class="slider-row"><span>Extra hire (kosten p/m)</span>
-          <input type="range" id="sc_hire" min="0" max="8000" step="250" value="${sc.extraHirePm}"><b>${eur(sc.extraHirePm)}</b></div>
+          <input type="range" id="sc_hire" min="0" max="8000" step="250" value="${sc.extraHirePm}"><b id="scv_hire">${eur(sc.extraHirePm)}</b></div>
         <div class="slider-row"><span>Hire start in</span>
           <select id="sc_hireVanaf">${maandOpts}</select><span></span></div>
         <div class="slider-row"><span>Geplande aflossingen meenemen</span>
@@ -157,13 +172,17 @@ function renderCashflow(root) {
       </div>
     </div>
 
-    <div class="panel table-wrap"><h2>Maandtabel</h2><table>
-      <tr><th>Maand</th><th class="num">In: facturen</th><th class="num">In: flex</th><th class="num">In: scenario</th><th class="num">Uit: kosten</th><th class="num">Btw-afdracht</th><th class="num">Aflossing</th><th class="num">Saldo</th></tr>
-      ${tabel}</table>
-      <p class="muted mt">Facturen incl. btw, op verwachte betaaldatum (geplande factuurdatum + betaaltermijn). Te late betalingen: aanname binnen 2 weken. Btw-afdracht per kwartaal, minus geschatte voorbelasting (${eur(S('voorbelasting_pm', 0))}/mnd — instelbaar).</p>
-    </div>`;
+    <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>`;
 
-  const upd = () => { rerender(); };
+  // schuiven: alleen de dynamische delen verversen, niet de schuiven zelf
+  const upd = () => {
+    $('#cfDyn').innerHTML = cfDynHtml(sc);
+    $('#cfTabel').innerHTML = cfTabelHtml(sc);
+    $('#scv_omzet').textContent = eur(sc.omzetPm);
+    $('#scv_dip').textContent = Math.round(sc.omzetDipPct * 100) + '%';
+    $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
+    $('#scv_hire').textContent = eur(sc.extraHirePm);
+  };
   $('#sc_omzet').oninput = e => { sc.omzetPm = +e.target.value; upd(); };
   $('#sc_dip').oninput = e => { sc.omzetDipPct = +e.target.value / 100; upd(); };
   $('#sc_flex').oninput = e => { sc.flexFactor = +e.target.value / 100; upd(); };

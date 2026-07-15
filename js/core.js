@@ -51,7 +51,9 @@ const S = (key, fallback = null) => {
 };
 
 // ── data laden ─────────────────────────────────────────────────
+let lastLoadTs = 0;
 async function loadAll() {
+  lastLoadTs = Date.now();
   const q = (t, order) => {
     let r = sb.from(t).select('*');
     if (order) r = r.order(order.col, { ascending: order.asc !== false });
