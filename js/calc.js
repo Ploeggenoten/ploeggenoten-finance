@@ -160,14 +160,19 @@ function potjes() {
   const mndInQ = (+t.slice(5, 7) - 1) % 3 + 1;
   const voorbelasting = Number(S('voorbelasting_pm', 0)) * mndInQ;
   const btwPot = Math.max(0, btwOntvangen - voorbelasting);
-  // Vpb: 19% (instelbaar) over winst YTD = gefactureerde omzet − kosten
-  const ytdStart = `${y}-01-01`;
-  const omzetYtd = D.installments.filter(i => i.factuurdatum && i.factuurdatum >= ytdStart
+  // Vpb: 19% (instelbaar) over winst YTD = gefactureerde omzet − kosten.
+  // Als er een Yuki-anker is (werkelijke winst per rapportdatum) rekenen we vanaf dáár verder.
+  const ankerWinst = Number(S('yuki_winst_ytd', 0) || 0);
+  const ankerDatum = S('yuki_winst_datum', null);
+  const start = ankerDatum && ankerDatum.slice(0, 4) === String(y) ? ankerDatum : `${y}-01-01`;
+  const basisWinst = start === ankerDatum ? ankerWinst : 0;
+  const omzetYtd = basisWinst + D.installments.filter(i => i.factuurdatum && i.factuurdatum > start
     && (i.status === 'gefactureerd' || i.status === 'betaald')).reduce((s, i) => s + +i.bedrag_excl, 0);
   let kostenYtd = 0;
-  for (let m = 0; m < +t.slice(5, 7); m++) {
+  for (let m = 0; m < 12; m++) {
     const mk = `${y}-${String(m + 1).padStart(2, '0')}-01`;
     if (mk > monthKey(t)) break;
+    if (mk <= monthKey(start)) continue;   // maanden t/m het anker zitten al in de ankerwinst
     kostenYtd += actueelVoorMaand(mk) ?? budgetVoorMaand(mk);
   }
   const winstYtd = omzetYtd - kostenYtd;

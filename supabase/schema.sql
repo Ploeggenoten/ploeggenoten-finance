@@ -141,23 +141,33 @@ insert into fin_settings (key, value) values
   ('default_betaaltermijn','14'),
   ('scenario_omzet_pm',    '25000'),  -- nieuwe W&S-omzet per maand (scenario)
   ('target_omzet_pm',      'null'),   -- nog samen te bepalen
-  ('voorbelasting_pm',     '800')     -- indicatie btw-aftrek op kosten p/m — pas aan!
+  ('voorbelasting_pm',     '2800'),   -- btw-aftrek op kosten p/m (Yuki YTD: €18.719 / 6,5 mnd)
+  ('yuki_winst_ytd',       '85238.87'),   -- winst vóór belastingen per rapportdatum (Vpb-anker)
+  ('yuki_winst_datum',     '"2026-07-15"')
 on conflict (key) do nothing;
 
--- Vaste maandlasten uit je cashflowprognose (bron: Ploeggenoten_Cashflowprognose_1.xlsx)
+-- Vaste maandlasten: loonkosten uit je prognose, rest uit Yuki YTD-gemiddelden (rapport 15-07-2026)
 insert into fin_costs_budget (categorie, bedrag_pm, vanaf_maand, tot_maand, note)
 select * from (values
   ('Loonkosten team (Bryan + Tjerk)', 6735::numeric,  date '2026-01-01', date '2026-07-01', 'werkgeverslasten, excl. Rajesh'),
   ('Loonkosten team (incl. Rajesh)', 11035::numeric,  date '2026-08-01', null::date,       'Rajesh erbij vanaf aug ''26 (€4300)'),
-  ('Management fee TVE Holding',      4300::numeric,  date '2026-01-01', null::date,       null),
-  ('Overige vaste kosten',            4300::numeric,  date '2026-01-01', null::date,       'huisvesting, auto, marketing, overig')
+  ('Management fee TVE Holding',      4300::numeric,  date '2026-01-01', null::date,       'wordt nu opgeboekt in RC (niet uitbetaald) — zie lening RC TVE'),
+  ('Huisvesting',                     1515::numeric,  date '2026-01-01', null::date,       'Yuki YTD-gemiddelde (huur €1.455 + gwe)'),
+  ('Auto''s (verzekering/brandstof/wegenbelasting)', 654::numeric, date '2026-01-01', null::date, 'Yuki YTD-gemiddelde, excl. lease-termijnen'),
+  ('Autolease-termijnen',                0::numeric,  date '2026-01-01', null::date,       'VUL IN: maandtermijn van de 2 leasecontracten (€36k langlopend op balans)'),
+  ('Marketing & verkoop',             2255::numeric,  date '2026-01-01', null::date,       'Yuki YTD-gemiddelde — grootste post: advertenties €14k YTD'),
+  ('Kantoor, adviseurs & overig',     2525::numeric,  date '2026-01-01', null::date,       'Yuki YTD-gemiddelde (adviseurs €10,5k YTD, deels eenmalig?)')
 ) v(categorie, bedrag_pm, vanaf_maand, tot_maand, note)
 where not exists (select 1 from fin_costs_budget);
 
--- Lening van je moeder (aanname startdatum: pas aan in de app)
+-- Leningen: moeder (aanname startdatum — pas aan) + RC-schuld aan TVE Holding (uit Yuki-balans)
 insert into fin_loans (naam, hoofdsom, rente_pct, start_datum, deadline, note)
-select 'Lening moeder', 30000, 5, date '2026-06-01', date '2028-06-01',
-       'Terugbetalen binnen 2 jaar, 5% rente. Startdatum is een aanname — pas aan.'
+select * from (values
+  ('Lening moeder', 30000::numeric, 5::numeric, date '2026-06-01', date '2028-06-01',
+   'Terugbetalen binnen 2 jaar, 5% rente. Startdatum is een aanname — pas aan.'),
+  ('RC TVE Holding', 24979.23::numeric, 0::numeric, date '2026-01-01', null::date,
+   'Rekening-courant per 15-07-2026 (Yuki). Loopt op met €4.300/mnd zolang de management fee niet wordt uitbetaald.')
+) v(naam, hoofdsom, rente_pct, start_datum, deadline, note)
 where not exists (select 1 from fin_loans);
 
 insert into fin_loan_payments (loan_id, datum, bedrag, gepland, note)
@@ -166,7 +176,7 @@ from fin_loans l
 where l.naam = 'Lening moeder'
   and not exists (select 1 from fin_loan_payments);
 
--- Startsaldo uit je prognose (jun '26) — werk dit meteen bij in de app!
+-- Werkelijk banksaldo uit Yuki-balans (Rabobank betaalrekening per 15-07-2026)
 insert into fin_bank_saldo (datum, saldo, note)
-select date '2026-06-01', 30000, 'Beginsaldo uit cashflowprognose — vervang door je echte saldo'
+select date '2026-07-15', 130709.61, 'Betaalrekening Rabobank — Yuki tussentijds rapport 15-07-2026'
 where not exists (select 1 from fin_bank_saldo);
