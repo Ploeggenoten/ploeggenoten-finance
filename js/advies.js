@@ -62,9 +62,19 @@ function adviesEngine() {
     `Plan het aantal deals dat het gat dicht: bij een gemiddelde fee van ${eur(gemFee)} is dat er ${Math.ceil((kw3.reduce((s, r) => s + r.uitTot, 0) - kw3.reduce((s, r) => s + r.inFact + r.inFlex, 0)) / Math.max(1, gemFee))} in dit kwartaal.`);
 
   const rcTve = D.loans.find(l => /tve/i.test(l.naam));
-  if (rcTve) add('gevaar', 1, 'Rekening-courant TVE loopt op', eur(rcTve.hoofdsom) + '+',
-    `Je management fee wordt opgeboekt in RC (±€4.300/m) in plaats van uitbetaald. Fiscaal kan een oplopende RC-DGA door de Belastingdienst als (verkapte) uitdeling worden gezien.`,
-    `Bespreek met je boekhouder: periodiek uitkeren, verrekenen, of een RC-overeenkomst met rente vastleggen.`);
+  if (rcTve) {
+    const feePm = Number(S('mgmt_fee_pm', 0)), uitkPm = Number(S('mgmt_uitkering_pm', 0));
+    const afbouwPm = uitkPm - feePm;
+    if (afbouwPm > 0) {
+      const mndKlaar = Math.ceil(rcTve.hoofdsom / afbouwPm);
+      add('sterkte', 1, 'RC-schuld aan TVE wordt netjes afgebouwd', eur(rcTve.hoofdsom),
+        `Je keert ${eur(uitkPm)}/m uit terwijl de fee ${eur(feePm)}/m is — het verschil (${eur(afbouwPm)}/m) lost de rekening-courant af. In dit tempo is de RC over ±${mndKlaar} maanden weg.`, null);
+    } else {
+      add('gevaar', 1, 'Rekening-courant TVE loopt op', eur(rcTve.hoofdsom) + '+',
+        `Je management fee (${eur(feePm)}/m) wordt niet (volledig) uitbetaald en stapelt op in RC. Fiscaal kan een oplopende RC-DGA door de Belastingdienst als (verkapte) uitdeling worden gezien.`,
+        `Bespreek met je boekhouder: periodiek uitkeren, verrekenen, of een RC-overeenkomst met rente vastleggen.`);
+    }
+  }
 
   if (mnd === 6 || mnd === 7) add('gevaar', 1, 'Zomerdip W&S komt eraan', 'jul–aug',
     `Beslissers zijn op vakantie: deals die nu niet rond zijn schuiven zes weken door. Klassieke valkuil: in september pas weer zaaien en in oktober-november omzetgat.`,

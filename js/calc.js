@@ -188,12 +188,14 @@ function potjes() {
     + D.installments.filter(i => i.factuurdatum && i.factuurdatum > start
       && (i.status === 'gefactureerd' || i.status === 'betaald')).reduce((s, i) => s + +i.bedrag_excl, 0)
     + D.flex.filter(w => w.week > start && w.week.slice(0, 4) === String(y)).reduce((s, w) => s + +w.bedrag, 0);
+  // het deel van de TVE-uitkering boven de fee is RC-aflossing (balans), géén kosten
+  const rcAfbouwPm = Math.max(0, Number(S('mgmt_uitkering_pm', 0)) - Number(S('mgmt_fee_pm', 0)));
   let kostenYtd = 0;
   for (let m = 0; m < 12; m++) {
     const mk = `${y}-${String(m + 1).padStart(2, '0')}-01`;
     if (mk > monthKey(t)) break;
     if (mk <= monthKey(start)) continue;   // maanden t/m het anker zitten al in de ankerwinst
-    kostenYtd += actueelVoorMaand(mk) ?? budgetVoorMaand(mk);
+    kostenYtd += (actueelVoorMaand(mk) ?? budgetVoorMaand(mk)) - rcAfbouwPm;
   }
   const winstYtd = omzetYtd - kostenYtd;
   const vpbPot = Math.max(0, winstYtd * Number(S('vpb_pct', .19)));
