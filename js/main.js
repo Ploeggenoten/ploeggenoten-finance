@@ -43,6 +43,9 @@ async function startApp() {
     await loadAll();
     await autoCreatePlacements();   // contract getekend op het bord → automatisch plaatsing (concept)
     $('#syncDot').classList.remove('err');
+    // Yuki dagvers houden: max 1× per 20 uur, op de achtergrond
+    const ts = S('yuki_synced_at');
+    if (!ts || Date.now() - new Date(ts).getTime() > 20 * 3600e3) yukiSync(true);
   } catch (e) {
     $('#syncDot').classList.add('err');
     if (/relation .* does not exist|could not find the table/i.test(e.message || '')) {
@@ -57,6 +60,23 @@ async function startApp() {
     return;
   }
   switchView('vandaag');
+}
+
+// ── Yuki-sync: dagvers saldo/winst/omzet via Edge Function ─────
+async function yukiSync(stil = false) {
+  try {
+    const { data, error } = await sb.functions.invoke('yuki-sync');
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    // verse settings + saldi ophalen
+    const { data: st } = await sb.from('fin_settings').select('*');
+    if (st) D.settings = Object.fromEntries(st.map(r => [r.key, r.value]));
+    await reload('fin_bank_saldo', 'saldi', 'datum', false);
+    if (!stil) toast(`Yuki ✓ — saldo ${eur(data.saldo)} · winst YTD ${eur(data.winst)}`);
+    rerender();
+  } catch (e) {
+    if (!stil) toast('Yuki-sync mislukt: ' + (e.message || e), true);
+  }
 }
 
 function loginFout(error) {

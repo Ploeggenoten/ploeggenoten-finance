@@ -54,6 +54,10 @@ function renderInstellingen(root) {
           </div>
           <div class="modal-foot"><button class="btn primary" id="lSave">Opslaan</button></div>` : '<div class="empty">Geen lening.</div>'}
         </div>
+        <div class="panel mb"><h2>🔄 Yuki-koppeling</h2>
+          <p class="muted">Haalt automatisch (dagelijks bij openen) je banksaldo, winst en omzet uit de boekhouding.
+          ${S('yuki_synced_at') ? `Laatste sync: <b>${fmtD(S('yuki_synced_at').slice(0, 10))}</b> · winst YTD ${eur(S('yuki_winst_ytd'))} · omzet YTD ${eur(S('yuki_omzet_ytd'))} · debiteuren ${eur(S('yuki_debiteuren'))}` : 'Nog niet gesynchroniseerd.'}</p>
+          <button class="btn primary" id="yukiNu">Nu verversen uit Yuki</button></div>
         <div class="panel mb"><h2>📧 Dagelijkse e-mail digest</h2>
           <p class="muted">Fase 2: elke ochtend een mail met je acties van vandaag. Hiervoor zetten we een Supabase Edge Function + e-maildienst op — vraag Claude wanneer je zover bent.</p></div>
         <div class="panel"><h2>ℹ️ Over</h2>
@@ -63,6 +67,10 @@ function renderInstellingen(root) {
       </div>
     </div>`;
 
+  $('#yukiNu').onclick = async e => {
+    e.target.disabled = true; e.target.textContent = 'Bezig…';
+    await yukiSync(false);
+  };
   $('#tNieuw').onclick = () => openTariefModal(null, klanten);
   root.addEventListener('click', async e => {
     const ed = e.target.closest('[data-tedit]');
