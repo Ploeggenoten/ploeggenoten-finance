@@ -29,11 +29,10 @@ function renderVandaag(root) {
   const actieHtml = lijst.length ? lijst.map((a, idx) => {
     const wie = a.p ? `${esc(a.p.kandidaat)} · ${esc(a.p.klant)}` : (a.c ? `${esc(a.c.naam)} · ${esc(a.c.klant || '')}` : 'Algemeen');
     const bedrag = a.i ? ` · ${eur(a.i.bedrag_excl)} excl. btw` : '';
-    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢', concept: '✨', yuki_betaald: '🔗' }[a.soort] || '•';
+    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢', concept: '✨' }[a.soort] || '•';
     let btn = '';
     if (a.soort === 'factureren') btn = `<button class="btn small primary" data-act="factureer" data-idx="${idx}">Gefactureerd ✓</button>`;
     if (a.soort === 'te_laat') btn = `<button class="btn small primary" data-act="betaald" data-idx="${idx}">Betaald ✓</button>`;
-    if (a.soort === 'yuki_betaald') btn = `<button class="btn small primary" data-act="betaald" data-idx="${idx}">Betaald ✓</button>`;
     if (a.soort === 'afronden') btn = `<button class="btn small primary" data-act="afronden" data-idx="${idx}">Afronden →</button>`;
     if (a.soort === 'stop') btn = `<button class="btn small danger" data-act="stopverwerk" data-idx="${idx}">Termijnen vervallen</button>`;
     if (a.soort === 'stop_signaal') btn = `<button class="btn small danger" data-act="stopsignaal" data-idx="${idx}">Verwerk stop</button>`;

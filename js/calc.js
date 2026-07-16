@@ -111,10 +111,7 @@ function acties() {
   const saldo = D.saldi[0];
   if (!saldo || daysBetween(saldo.datum, t) > 14)
     list.push({ soort: 'saldo', urg: 1, txt: saldo ? `Banksaldo ${daysBetween(saldo.datum, t)} dgn oud — werk bij` : 'Vul je banksaldo in' });
-  // Yuki zegt: deze facturen staan niet meer open → waarschijnlijk betaald
-  for (const s of yukiBetaaldSuggesties())
-    list.push({ soort: 'yuki_betaald', urg: 1, p: s.p, i: s.i,
-      txt: `Yuki toont geen open post meer voor ${s.p.kandidaat} t${s.i.termijn_nr} (${eur(s.i.bedrag_excl)}) — betaald?` });
+  // (gefactureerd/betaald worden automatisch uit Yuki bijgewerkt tijdens de sync)
   // flex-bewaking: vorige week (ma t/m zo voorbij) nog niet ingevuld?
   if (D.flex.length) {
     const dag = (new Date(t + 'T12:00:00').getDay() + 6) % 7;      // ma=0
@@ -493,25 +490,38 @@ function actueelVoorMaand(mk) {
   return rows.length ? rows.reduce((s, a) => s + +a.bedrag, 0) : null;
 }
 
-// ── Yuki open posten: betaald-suggesties + bewaking ────────────
-function yukiBetaaldSuggesties() {
+// factuur verdween uit Yuki's open posten → automatisch op "betaald"
+// Veiligheid: alleen als Yuki daadwerkelijk open posten teruggaf (anders is "leeg" dubbelzinnig)
+// en de termijn minstens 5 dagen geleden is gefactureerd.
+async function yukiBetaaldSync() {
   const debOpen = D.yukiOpen.filter(r => r.soort === 'debiteur');
-  if (!S('yuki_synced_at') || !D.yukiOpen.length) return [];   // pas suggesties doen als er ooit gesynct is
-  const uit = [];
+  if (!S('yuki_synced_at') || !debOpen.length) return 0;
+  const btw = 1 + Number(S('btw_pct', .21));
+  let n = 0;
   for (const p of D.placements) {
     if (p.concept) continue;
+    const voornaam = (p.kandidaat || '').toLowerCase().split(' ')[0];
+    const achternaam = (p.kandidaat || '').toLowerCase().split(' ').slice(-1)[0];
     for (const i of instOf(p.id)) {
       if (i.status !== 'gefactureerd' || !i.factuurdatum) continue;
-      if (daysBetween(i.factuurdatum, todayISO()) < 5) continue;   // te vers om conclusies te trekken
-      const naam = (p.kandidaat || '').toLowerCase().split(' ')[0];
-      const inclBtw = +i.bedrag_excl * (1 + Number(S('btw_pct', .21)));
-      const nogOpen = debOpen.some(r =>
-        (naam && (r.omschrijving || '').toLowerCase().includes(naam)) ||
-        Math.abs(+r.open_bedrag - inclBtw) < 1 || Math.abs(+r.origineel_bedrag - inclBtw) < 1);
-      if (!nogOpen) uit.push({ p, i });
+      if (daysBetween(i.factuurdatum, todayISO()) < 5) continue;   // te vers
+      const inclBtw = +i.bedrag_excl * btw;
+      const nogOpen = debOpen.some(r => {
+        const oms = (r.omschrijving || '').toLowerCase();
+        const naamHit = (voornaam && oms.includes(voornaam)) || (achternaam.length > 3 && oms.includes(achternaam));
+        const bedragHit = Math.abs(+r.open_bedrag - inclBtw) < 2 || Math.abs(+r.origineel_bedrag - inclBtw) < 2;
+        const tm = oms.match(/(\d+)\s*(?:\/|van)\s*(\d+)/);
+        if (naamHit && tm) return Number(tm[1]) === i.termijn_nr;   // exacte termijn nog open
+        return naamHit && bedragHit;
+      });
+      if (!nogOpen) {
+        await dbWrite('fin_installments', t => t.update({ status: 'betaald', betaaldatum: S('yuki_synced_at', todayISO()).slice(0, 10) }).eq('id', i.id));
+        n++;
+      }
     }
   }
-  return uit;
+  if (n) await reload('fin_installments', 'installments', 'geplande_datum');
+  return n;
 }
 
 // Yuki toont een verstuurde factuur → zet de bijbehorende termijn automatisch op "gefactureerd"

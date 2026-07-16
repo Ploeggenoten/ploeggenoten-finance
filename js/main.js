@@ -75,9 +75,11 @@ async function yukiSync(stil = false) {
     if (st) D.settings = Object.fromEntries(st.map(r => [r.key, r.value]));
     await reload('fin_bank_saldo', 'saldi', 'datum', false);
     await reload('fin_yuki_open', 'yukiOpen', 'datum');
-    // Yuki weet welke facturen verstuurd zijn → termijnen automatisch op 'gefactureerd'
+    // Yuki weet welke facturen verstuurd/betaald zijn → termijnen automatisch bijwerken
     const nGef = await yukiGefactureerdSync();
-    if (!stil) toast(`Yuki ✓ — saldo ${eur(data.saldo)} · winst YTD ${eur(data.winst)}${nGef ? ` · ${nGef} factuur(en) automatisch bijgewerkt` : ''}`);
+    const nBet = await yukiBetaaldSync();
+    const bij = [nGef && `${nGef} gefactureerd`, nBet && `${nBet} betaald`].filter(Boolean).join(', ');
+    if (!stil) toast(`Yuki ✓ — saldo ${eur(data.saldo)} · winst YTD ${eur(data.winst)}${bij ? ` · ${bij}` : ''}`);
     rerender();
   } catch (e) {
     if (!stil) toast('Yuki-sync mislukt: ' + (e.message || e), true);
