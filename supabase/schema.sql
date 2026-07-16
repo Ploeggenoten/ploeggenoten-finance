@@ -103,6 +103,15 @@ create table if not exists fin_loan_payments (
   note text
 );
 
+-- W&S-tarieven per klant (functie leeg = klant-standaard); fee = loon × (1+toeslag) × 12,96 × tarief
+create table if not exists fin_tarieven (
+  id bigint generated always as identity primary key,
+  klant text not null,
+  functie text,
+  tarief_pct numeric not null,
+  note text
+);
+
 -- Flex-inkomsten via backoffice (Pronkert): 1 regel per week
 create table if not exists fin_flex_weken (
   id bigint generated always as identity primary key,
@@ -131,7 +140,7 @@ begin
   foreach t in array array[
     'fin_placements','fin_installments','fin_costs_budget','fin_costs_actual',
     'fin_bank_saldo','fin_bank_tx','fin_loans','fin_loan_payments',
-    'fin_settings','fin_dismissed_candidates','fin_flex_weken']
+    'fin_settings','fin_dismissed_candidates','fin_flex_weken','fin_tarieven']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists fin_owner_only on %I', t);
@@ -152,7 +161,8 @@ insert into fin_settings (key, value) values
   ('scenario_omzet_pm',    '25000'),  -- nieuwe W&S-omzet per maand (scenario)
   ('target_omzet_pm',      'null'),   -- nog samen te bepalen
   ('voorbelasting_pm',     '2800'),   -- btw-aftrek op kosten p/m (Yuki YTD: €18.719 / 6,5 mnd)
-  ('fee_pct',              '0.22'),   -- fee-voorstel in wizard: % van jaarsalaris
+  ('fee_pct',              '0.22'),   -- fallback-schatting als er geen klanttarief bekend is
+  ('jaarfactor',           '12.96'),  -- maandloon × jaarfactor = fee-basis (12 mnd + 8% vakantiegeld)
   ('mgmt_fee_pm',          '4300'),   -- management fee (kosten, drukt op winst)
   ('mgmt_uitkering_pm',    '6000'),   -- werkelijke maandelijkse uitkering aan TVE (cash); verschil bouwt RC af
   ('yuki_winst_ytd',       '85238.87'),   -- winst vóór belastingen per rapportdatum (Vpb-anker)

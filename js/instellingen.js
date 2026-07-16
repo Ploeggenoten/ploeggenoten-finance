@@ -23,8 +23,22 @@ function renderInstellingen(root) {
 
   const lening = D.loans[0];
 
+  const klanten = [...new Set([...D.placements.map(p => p.klant), ...D.clients.map(c => c.naam)])].sort();
+  const tariefRows = D.tarieven.map(r => `<tr>
+    <td>${esc(r.klant)}</td><td>${esc(r.functie || 'alle functies')}</td>
+    <td class="num"><b>${Math.round(r.tarief_pct * 100)}%</b></td><td class="muted">${esc(r.note || '')}</td>
+    <td class="right"><button class="btn small ghost" data-tedit="${r.id}">✎</button>
+    <button class="btn small ghost" data-tdel="${r.id}">✕</button></td></tr>`).join('');
+
   root.innerHTML = `
     <h1>Instellingen</h1>
+    <div class="panel mt mb"><div class="spread mb"><h2>💼 W&S-tarieven per klant</h2>
+      <button class="btn primary small" id="tNieuw">+ Tarief</button></div>
+      <div class="table-wrap"><table>
+      <tr><th>Klant</th><th>Functie</th><th class="num">Tarief</th><th>Notitie</th><th></th></tr>
+      ${tariefRows || '<tr><td colspan="5" class="empty">Nog geen tarieven — voeg per klant je afgesproken W&S-percentage toe. De fee wordt dan automatisch: maandloon × (1+toeslag) × 12,96 × tarief.</td></tr>'}
+      </table></div>
+      <p class="muted mt">Een rij zónder functie geldt als standaard voor die klant; een rij mét functie gaat vóór (bijv. "Kok" bij Starcuisine een ander percentage). Maandloon en ploegentoeslag vult je AM in op het pijplijnbord.</p></div>
     <div class="grid cols-2 mt">
       <div class="panel"><h2>⚙️ Parameters</h2>${rows}
         <div class="modal-foot"><button class="btn primary" id="setSave">Opslaan</button></div>
@@ -49,6 +63,18 @@ function renderInstellingen(root) {
       </div>
     </div>`;
 
+  $('#tNieuw').onclick = () => openTariefModal(null, klanten);
+  root.addEventListener('click', async e => {
+    const ed = e.target.closest('[data-tedit]');
+    if (ed) return openTariefModal(D.tarieven.find(r => r.id === +ed.dataset.tedit), klanten);
+    const del = e.target.closest('[data-tdel]');
+    if (del) {
+      if (!confirm('Dit tarief verwijderen?')) return;
+      await dbWrite('fin_tarieven', t => t.delete().eq('id', +del.dataset.tdel));
+      await reload('fin_tarieven', 'tarieven', 'klant');
+      rerender();
+    }
+  });
   $('#setSave').onclick = async () => {
     for (const inp of $$('[data-skey]')) {
       const raw = inp.value.trim();
@@ -58,6 +84,30 @@ function renderInstellingen(root) {
     }
     toast('Instellingen opgeslagen ✓'); rerender();
   };
+  window.openTariefModal = (r, klantLijst) => {
+    openModal(`
+      <div class="modal-head"><h2>${r ? 'Tarief bewerken' : 'Nieuw tarief'}</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+      <div class="form-grid">
+        <div><label>Klant</label><input id="t_klant" list="tKlantList" value="${esc(r?.klant || '')}">
+          <datalist id="tKlantList">${klantLijst.map(k => `<option value="${esc(k)}">`).join('')}</datalist></div>
+        <div><label>Functie (leeg = alle)</label><input id="t_functie" value="${esc(r?.functie || '')}" placeholder="bijv. Kok"></div>
+        <div><label>Tarief % van jaarloon</label><input id="t_pct" type="number" step="0.5" min="1" max="50" value="${r ? Math.round(r.tarief_pct * 1000) / 10 : ''}" placeholder="bijv. 20"></div>
+        <div class="span3"><label>Notitie (bijv. verwijzing overeenkomst)</label><input id="t_note" value="${esc(r?.note || '')}"></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
+      <button class="btn primary" id="t_save">Opslaan</button></div>`, { narrow: true });
+    $('#t_save').onclick = async () => {
+      const row = {
+        klant: $('#t_klant').value.trim(), functie: $('#t_functie').value.trim() || null,
+        tarief_pct: Number($('#t_pct').value) / 100, note: $('#t_note').value.trim() || null,
+      };
+      if (!row.klant || !row.tarief_pct) return toast('Klant en tarief zijn verplicht', true);
+      await dbWrite('fin_tarieven', t => r ? t.update(row).eq('id', r.id) : t.insert(row));
+      await reload('fin_tarieven', 'tarieven', 'klant');
+      closeModal(); toast('Tarief opgeslagen ✓'); rerender();
+    };
+  };
+
   $('#lSave') && ($('#lSave').onclick = async () => {
     await dbWrite('fin_loans', t => t.update({
       naam: $('#l_naam').value, hoofdsom: Number($('#l_som').value || 0), rente_pct: Number($('#l_rente').value || 0),

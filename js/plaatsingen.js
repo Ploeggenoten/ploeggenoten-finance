@@ -61,14 +61,12 @@ function genSchema(preset, fee, startISO, opts = {}) {
 // ── wizard: nieuwe plaatsing (evt. vanuit pijplijn-kandidaat) ──
 function openPlacementWizard({ candidate = null, edit = null } = {}) {
   const p = edit || {};
-  // fee-voorstel: maandsalaris uit de bord-notitie (bijv. "3500") × 12 × fee-%
-  let feeSuggestie = null, salarisHint = null;
+  // fee-voorstel via de fee-motor: maandloon (bord) × (1+toeslag) × 12,96 × klanttarief
+  let feeSuggestie = null, feeUitleg = null;
   if (candidate && !edit) {
-    const m = (candidate.note || '').match(/\b([2-6]\d{3})\b/);
-    if (m) {
-      salarisHint = Number(m[1]);
-      feeSuggestie = Math.round(salarisHint * 12 * Number(S('fee_pct', 0.22)));
-    }
+    const fb = feeBerekening(candidate);
+    feeSuggestie = fb.fee;
+    feeUitleg = fb.uitleg;
   }
   const startSuggestie = candidate ? (candidate.start || candidate.geplaatst_op || todayISO()) : todayISO();
   const volgId = () => {
@@ -86,7 +84,7 @@ function openPlacementWizard({ candidate = null, edit = null } = {}) {
       <div><label>Kandidaat</label><input id="w_kand" value="${esc(p.kandidaat || candidate?.naam || '')}"></div>
       <div><label>Functie</label><input id="w_functie" value="${esc(p.functie || candidate?.functie || '')}"></div>
       <div><label>Totale fee excl. btw</label><input id="w_fee" type="number" step="0.01" value="${p.fee_excl ?? feeSuggestie ?? ''}">
-        ${feeSuggestie ? `<span class="muted" style="font-size:11px">voorstel: ${Math.round(Number(S('fee_pct', 0.22)) * 100)}% × 12 × €${salarisHint} (uit bord-notitie)</span>` : ''}</div>
+        ${feeUitleg ? `<span class="muted" style="font-size:11px">${esc(feeUitleg)}</span>` : ''}</div>
       <div><label>Contract getekend</label><input id="w_contract" type="date" value="${esc(p.contract_datum || candidate?.geplaatst_op || todayISO())}"></div>
       <div><label>Betaaltermijn (dgn)</label><input id="w_betaal" type="number" value="${p.betaaltermijn_dgn ?? S('default_betaaltermijn', 14)}"></div>
       <div><label>Garantie (mnd)</label><input id="w_gar" type="number" value="${p.garantie_mnd ?? candidate?.garantie_mnd ?? 0}"></div>

@@ -157,6 +157,39 @@ function klantDefaults(bordKlant) {
   };
 }
 
+// tarief opzoeken: eerst klant+functie, dan klant-standaard (rij zonder functie)
+function tariefVoor(bordKlant, functie) {
+  const nk = normKlant(bordKlant);
+  const rijen = D.tarieven.filter(r =>
+    normKlant(r.klant).startsWith(nk.slice(0, 8)) || nk.startsWith(normKlant(r.klant).slice(0, 8)));
+  if (!rijen.length) return null;
+  const nf = (functie || '').toLowerCase();
+  const opFunctie = rijen.find(r => r.functie && (nf.includes(r.functie.toLowerCase()) || r.functie.toLowerCase().includes(nf)) && nf);
+  const standaard = rijen.find(r => !r.functie);
+  const rij = opFunctie || standaard || rijen[0];
+  return { pct: Number(rij.tarief_pct), rij };
+}
+
+// fee-berekening: maandloon × (1+toeslag) × jaarfactor (12,96) × klanttarief
+function feeBerekening(c) {
+  const jf = Number(S('jaarfactor', 12.96));
+  const tarief = tariefVoor(c.klant, c.functie);
+  const loonNote = (c.note || '').match(/\b([2-6]\d{3})\b/);
+  const loon = Number(c.maandloon) || (loonNote ? Number(loonNote[1]) : null);
+  const toeslag = Number(c.toeslag_pct || 0) / 100;
+  if (loon && tarief) {
+    const fee = Math.round(loon * (1 + toeslag) * jf * tarief.pct);
+    return { fee, zeker: true, uitleg: `€${loon}${toeslag ? ` × ${(1 + toeslag).toFixed(2).replace('.', ',')} (toeslag)` : ''} × ${String(jf).replace('.', ',')} × ${Math.round(tarief.pct * 100)}% (${tarief.rij.klant}${tarief.rij.functie ? ' · ' + tarief.rij.functie : ''}) = €${fee}` };
+  }
+  if (loon) {
+    const fee = Math.round(loon * (1 + toeslag) * 12 * Number(S('fee_pct', 0.22)));
+    return { fee, zeker: false, uitleg: `Geen tarief bekend voor ${c.klant} — geschat: €${loon} × 12 × ${Math.round(Number(S('fee_pct', 0.22)) * 100)}%. Vul het tarief in bij Instellingen!` };
+  }
+  const kd = klantDefaults(c.klant);
+  const fee = Math.round(kd.gemFee || kpis().gemFee || 8500);
+  return { fee, zeker: false, uitleg: 'Geen maandloon bekend (bord) — fee geschat op klant/gemiddelde. Bevestig!' };
+}
+
 function volgendPlaatsingId() {
   const nums = D.placements.map(x => parseInt((x.id || '').replace(/\D/g, ''))).filter(n => !isNaN(n));
   return 'P' + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0');
@@ -167,19 +200,17 @@ async function autoCreatePlacements() {
   let gemaakt = 0;
   for (const c of nieuw) {
     const kd = klantDefaults(c.klant);
-    // fee: salaris uit bord-notitie > klant-gemiddelde > globaal gemiddelde
-    const m = (c.note || '').match(/\b([2-6]\d{3})\b/);
-    const fee = m ? Math.round(Number(m[1]) * 12 * Number(S('fee_pct', 0.22)))
-                  : Math.round(kd.gemFee || kpis().gemFee || 8500);
+    const fb = feeBerekening(c);
     const start = c.start || c.geplaatst_op || todayISO();
     const row = {
       id: volgendPlaatsingId(), klant: kd.sheetKlant, kandidaat: c.naam, functie: c.functie || '',
-      fee_excl: fee, contract_datum: c.geplaatst_op || todayISO(), eerste_factuurdatum: start,
+      fee_excl: fb.fee, contract_datum: c.geplaatst_op || todayISO(), eerste_factuurdatum: start,
       aantal_termijnen: kd.n, maanden_tussen: kd.tussen, betaaltermijn_dgn: kd.betaal,
       garantie_mnd: Number(c.garantie_mnd || 0), pipeline_candidate_id: c.id,
       bron: 'pipeline', concept: true,
-      note: m ? `Fee geschat: ${Math.round(Number(S('fee_pct', 0.22)) * 100)}% × 12 × €${m[1]} (bord-notitie)` : 'Fee geschat op klant/gemiddelde — bevestig!',
+      note: fb.uitleg,
     };
+    const fee = fb.fee;
     try {
       await dbWrite('fin_placements', t => t.insert(row));
       const schema = genSchema(kd.n > 1 ? 'nx' : '1x', fee, start, { n: kd.n, tussen: kd.tussen });
