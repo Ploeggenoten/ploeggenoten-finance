@@ -124,7 +124,7 @@ function cfDynHtml(sc) {
      ${scen('📊', 'Verwacht · pijplijn', `~${pf.verwachtAantal.toFixed(1)} plaatsingen gewogen in beeld`, sVerwacht, 'var(--accent)')}
      ${scen('⚠️', 'Tegenvaller', `${down}/mnd → ${eur(omzetPm(down))} omzet p/m`, sDown, 'var(--amber)')}
    </div>
-   <div class="panel mb" style="background:var(--surface2, #f7f7f4);border-left:4px solid var(--amber)">
+   <div class="panel mb" style="border-left:4px solid var(--amber)">
      <b>Wat sturen op plaatsingen oplevert.</b> Elke plaatsing méér per maand ≈ <b>${eur(gemFee)}</b> omzet
      (${eur(omzetPm(1))} na blijfkans), die ~6–8 weken later in je cash landt.
      Het verschil tussen <b>${tgt}/mnd</b> en <b>${down}/mnd</b> is over 12 mnd
