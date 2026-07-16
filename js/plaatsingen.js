@@ -290,7 +290,9 @@ function renderPlaatsingen(root) {
       <button class="btn small ghost" data-dismiss="${esc(c.id)}" title="Niet factureren">✕</button></div>`).join('')}
     </div>` : '';
 
-  const rows = D.placements.slice().sort((a, b) => (b.contract_datum || '').localeCompare(a.contract_datum || '')).map(p => {
+  // sorteer op P-nummer (zoals de oude Excel); nieuwe/concept-plaatsingen vallen vanzelf onderaan
+  const pNum = p => parseInt((p.id || '').replace(/\D/g, '')) || 0;
+  const rows = D.placements.slice().sort((a, b) => pNum(a) - pNum(b)).map(p => {
     const st = placementStats(p);
     const g = garantie(p);
     return `<tr class="clickable" data-pid="${esc(p.id)}">
