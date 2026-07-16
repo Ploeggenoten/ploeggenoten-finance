@@ -41,7 +41,8 @@ async function startApp() {
   $('#viewRoot').innerHTML = `<div class="empty" style="padding:60px">⏳ Cijfers laden…</div>`;
   try {
     await loadAll();
-    await autoCreatePlacements();   // contract getekend op het bord → automatisch plaatsing (concept)
+    await autoCreatePlacements();       // W&S: contract getekend → automatisch plaatsing (concept)
+    await autoCreateFlexPlacements();   // Flex: contract getekend → automatisch flexkracht (concept)
     $('#syncDot').classList.remove('err');
     // Yuki dagvers houden: max 1× per 20 uur, op de achtergrond
     const ts = S('yuki_synced_at');
@@ -125,6 +126,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (document.visibilityState !== 'visible') return;
     if ($('#app').style.display === 'none' || !lastLoadTs) return;
     if (Date.now() - lastLoadTs < 5 * 60 * 1000) return;
-    try { await loadAll(); await autoCreatePlacements(); rerender(); } catch (e) { $('#syncDot').classList.add('err'); }
+    try { await loadAll(); await autoCreatePlacements(); await autoCreateFlexPlacements(); rerender(); } catch (e) { $('#syncDot').classList.add('err'); }
   });
 });

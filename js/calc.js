@@ -139,24 +139,32 @@ function flexPlBerekening(fp) {
   const urenPw = Number(fp.uren_pw) || 40;
   const compleet = klantfactor && uurloon;
   const margePerUur = compleet ? (klantfactor - inkoop) * uurloon : null;
+  const gewerkteUren = fp.gewerkte_uren != null ? Number(fp.gewerkte_uren) : null;
   return {
-    klantfactor, inkoop, uurloon, urenPw, overnameUren, compleet, margePerUur,
+    klantfactor, inkoop, uurloon, urenPw, overnameUren, compleet, margePerUur, gewerkteUren,
     margePerWeek: compleet ? margePerUur * urenPw : null,
     margePerMaand: compleet ? margePerUur * urenPw * 52 / 12 : null,
     // totale marge tot de kosteloze overname (het bedrag dat je "verdient" vóór de klant gratis mag overnemen)
     overnameWaarde: compleet && overnameUren ? margePerUur * overnameUren : null,
+    // werkelijk verdiend = marge/uur × gewerkte uren (leidend zodra ingevuld)
+    verdiend: compleet && gewerkteUren != null ? margePerUur * gewerkteUren : null,
   };
 }
 
 function flexPlStats() {
   const actief = D.flexPl.filter(f => !f.gestopt_op);
+  const gestopt = D.flexPl.filter(f => f.gestopt_op);
   const rows = actief.map(f => ({ f, ...flexPlBerekening(f) }));
+  const gestoptRows = gestopt.map(f => ({ f, ...flexPlBerekening(f) }));
   const compleet = rows.filter(r => r.compleet);
   return {
-    rows,
-    nActief: actief.length, nCompleet: compleet.length, nConcept: rows.filter(r => r.f.concept).length,
+    rows, gestoptRows,
+    nActief: actief.length, nGestopt: gestopt.length, nCompleet: compleet.length, nConcept: rows.filter(r => r.f.concept).length,
     margePerMaand: compleet.reduce((s, r) => s + r.margePerMaand, 0),
     overnamePotentieel: compleet.reduce((s, r) => s + (r.overnameWaarde || 0), 0),
+    // verdiende marge over gewerkte uren (actief + afgerond) — dit is echt geld dat je hebt gemaakt
+    verdiendTotaal: [...rows, ...gestoptRows].reduce((s, r) => s + (r.verdiend || 0), 0),
+    verdiendAfgerond: gestoptRows.reduce((s, r) => s + (r.verdiend || 0), 0),
   };
 }
 
@@ -266,6 +274,32 @@ async function autoCreatePlacements() {
     await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_installments', 'installments', 'geplande_datum')]);
     toast(`${gemaakt} nieuwe plaatsing(en) automatisch aangemaakt vanaf het bord — bevestig de fee`);
   }
+  return gemaakt;
+}
+
+// flex-kandidaten (type Flex) die contract-getekend zijn → flex-plaatsing
+async function autoCreateFlexPlacements() {
+  const linked = new Set(D.flexPl.map(f => f.pipeline_candidate_id).filter(Boolean));
+  const dismissed = new Set(D.dismissed.map(d => d.candidate_id));
+  const byName = new Set(D.flexPl.map(f => (f.kandidaat || '').trim().toLowerCase()));
+  const nieuw = D.candidates.filter(c =>
+    (c.type || '') === 'Flex' &&
+    (PLACED_FASES.includes(c.fase) || c.geplaatst_op) && c.fase !== 'Afgevallen' &&
+    !linked.has(c.id) && !dismissed.has(c.id) && !byName.has((c.naam || '').trim().toLowerCase()));
+  let gemaakt = 0;
+  for (const c of nieuw) {
+    const afspr = flexAfspraakVoor(c.klant);
+    const row = {
+      pipeline_candidate_id: c.id, kandidaat: c.naam, klant: c.klant,
+      klantfactor: afspr ? Number(afspr.factor) : null,
+      inkoop_factor: afspr ? Number(afspr.inkoop_factor) : Number(S('flex_inkoop_factor', 1.8)),
+      overname_uren: afspr ? afspr.overname_uren : null,
+      uren_pw: 40, start: c.start || c.geplaatst_op || todayISO(), concept: true,
+      note: 'Automatisch van bord — vul uurloon' + (afspr ? '' : ' + klantfactor') + ' in',
+    };
+    try { await dbWrite('fin_flex_plaatsingen', t => t.insert(row)); gemaakt++; } catch (e) { /* volgende keer */ }
+  }
+  if (gemaakt) { await reload('fin_flex_plaatsingen', 'flexPl', 'id'); toast(`${gemaakt} nieuwe flexkracht(en) van het bord — vul de uren/marge aan`); }
   return gemaakt;
 }
 

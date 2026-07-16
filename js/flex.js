@@ -67,13 +67,7 @@ function renderFlex(root) {
     const pe = e.target.closest('[data-fpedit]');
     if (pe) return openFlexPlModal(D.flexPl.find(f => f.id === +pe.dataset.fpedit));
     const ps = e.target.closest('[data-fpstop]');
-    if (ps) return (async () => {
-      const fp = D.flexPl.find(f => f.id === +ps.dataset.fpstop);
-      const datum = prompt(`Gestopt op (JJJJ-MM-DD) voor ${fp.kandidaat}:`, todayISO());
-      if (!datum) return;
-      await dbWrite('fin_flex_plaatsingen', t => t.update({ gestopt_op: datum }).eq('id', fp.id));
-      await reload('fin_flex_plaatsingen', 'flexPl', 'id'); toast('Flexkracht gestopt'); rerender();
-    })();
+    if (ps) return openFlexStopModal(D.flexPl.find(f => f.id === +ps.dataset.fpstop));
     const pd = e.target.closest('[data-fpdel]');
     if (pd) return (async () => {
       if (!confirm('Deze flex-plaatsing verwijderen?')) return;
@@ -84,37 +78,79 @@ function renderFlex(root) {
 }
 
 // ── flex-plaatsingen (marge-motor) ─────────────────────────────
+function flexPlRij(r, afgerond = false) {
+  const f = r.f;
+  const tags = [];
+  if (f.concept) tags.push(tag('✨ vul aan', 'amber'));
+  else if (!r.compleet) tags.push(tag('uurloon/factor mist', 'gray'));
+  return `<tr>
+    <td><b>${esc(f.kandidaat)}</b><br><span class="muted">${esc(f.klant)}${afgerond && f.gestopt_op ? ' · gestopt ' + fmtD(f.gestopt_op) : ''}</span> ${tags.join(' ')}</td>
+    <td class="num">${r.uurloon ? eur2(r.uurloon) : '—'}</td>
+    <td class="num">${r.klantfactor ? r.klantfactor.toFixed(2) : '—'} <span class="muted">− ${r.inkoop.toFixed(2)}</span></td>
+    <td class="num">${r.margePerUur != null ? eur2(r.margePerUur) : '—'}</td>
+    ${afgerond
+      ? `<td class="num">${r.gewerkteUren != null ? r.gewerkteUren + ' u' : '<span class="muted">uren?</span>'}</td>
+         <td class="num">${r.verdiend != null ? `<b style="color:var(--green)">${eur(r.verdiend)}</b>` : '—'}</td>`
+      : `<td class="num">${r.margePerMaand != null ? eur(r.margePerMaand) : '—'}</td>
+         <td class="num">${r.overnameWaarde != null ? `<b>${eur(r.overnameWaarde)}</b>` : '—'}</td>`}
+    <td class="right"><button class="btn small ghost" data-fpedit="${f.id}">✎</button>
+      ${afgerond ? '' : `<button class="btn small ghost" data-fpstop="${f.id}" title="Gestopt">⏹</button>`}
+      <button class="btn small ghost" data-fpdel="${f.id}">✕</button></td></tr>`;
+}
+
 function flexPlaatsingenPanel() {
   const st = flexPlStats();
-  const rows = st.rows.map(r => {
-    const f = r.f;
-    const tags = [];
-    if (f.concept) tags.push(tag('✨ vul aan', 'amber'));
-    if (!r.compleet) tags.push(tag('uurloon/factor mist', 'gray'));
-    return `<tr>
-      <td><b>${esc(f.kandidaat)}</b><br><span class="muted">${esc(f.klant)}</span> ${tags.join(' ')}</td>
-      <td class="num">${r.uurloon ? eur2(r.uurloon) : '—'}</td>
-      <td class="num">${r.klantfactor ? r.klantfactor.toFixed(2) : '—'} <span class="muted">− ${r.inkoop.toFixed(2)}</span></td>
-      <td class="num">${r.margePerUur != null ? eur2(r.margePerUur) : '—'}</td>
-      <td class="num">${r.margePerMaand != null ? eur(r.margePerMaand) : '—'}</td>
-      <td class="num">${r.overnameUren ? r.overnameUren + ' u' : '—'}</td>
-      <td class="num">${r.overnameWaarde != null ? `<b>${eur(r.overnameWaarde)}</b>` : '—'}</td>
-      <td class="right"><button class="btn small ghost" data-fpedit="${f.id}">✎</button>
-        <button class="btn small ghost" data-fpstop="${f.id}" title="Gestopt">⏹</button>
-        <button class="btn small ghost" data-fpdel="${f.id}">✕</button></td></tr>`;
-  }).join('');
-  return `<div class="panel mb"><div class="spread mb"><h2>👷 Flexkrachten via Pronkert <span class="muted">— verwachte marge</span></h2>
+  const actiefRows = st.rows.map(r => flexPlRij(r, false)).join('');
+  const afgerondRows = st.gestoptRows.map(r => flexPlRij(r, true)).join('');
+  return `<div class="panel mb"><div class="spread mb"><h2>👷 Flexkrachten via Pronkert</h2>
       <button class="btn primary small" id="fpNieuw">+ Flexkracht</button></div>
-    <div class="grid cols-3 mb">
-      <div class="kpi"><div class="lbl">Actieve flexkrachten</div><div class="val">${st.nActief}</div><div class="sub">${st.nConcept ? st.nConcept + ' nog aan te vullen' : 'allemaal compleet'}</div></div>
-      <div class="kpi good"><div class="lbl">Verwachte marge p/m</div><div class="val">${eur(st.margePerMaand)}</div><div class="sub">op basis van contracturen</div></div>
-      <div class="kpi"><div class="lbl">Overname-potentieel</div><div class="val">${eur(st.overnamePotentieel)}</div><div class="sub">marge tot kosteloze overname</div></div>
+    <div class="grid cols-4 mb">
+      <div class="kpi"><div class="lbl">Actief lopend</div><div class="val">${st.nActief}</div><div class="sub">${st.nConcept ? st.nConcept + ' nog aan te vullen' : 'via Pronkert'}</div></div>
+      <div class="kpi good"><div class="lbl">Verwachte marge p/m</div><div class="val">${eur(st.margePerMaand)}</div><div class="sub">op contracturen</div></div>
+      <div class="kpi"><div class="lbl">Overname-potentieel</div><div class="val">${eur(st.overnamePotentieel)}</div><div class="sub">tot kosteloze overname</div></div>
+      <div class="kpi good"><div class="lbl">Verdiend over gewerkte uren</div><div class="val">${eur(st.verdiendTotaal)}</div><div class="sub">${st.nGestopt ? 'incl. ' + eur(st.verdiendAfgerond) + ' afgerond' : 'werkelijk gemaakt'}</div></div>
     </div>
+    <h3>Actief lopend</h3>
     <div class="table-wrap"><table>
-    <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Marge/mnd</th><th class="num">Overname-uren</th><th class="num">Overname-waarde</th><th></th></tr>
-    ${rows || '<tr><td colspan="8" class="empty">Nog geen flexkrachten. Voeg ze toe of ze verschijnen automatisch vanuit het bord (fase Gestart, type Flex).</td></tr>'}
+    <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Marge/mnd</th><th class="num">Overname-waarde</th><th></th></tr>
+    ${actiefRows || '<tr><td colspan="7" class="empty">Geen actieve flexkrachten. Ze verschijnen automatisch vanuit het bord (Contract getekend, type Flex).</td></tr>'}
     </table></div>
-    <p class="muted mt">Marge/uur = (klantfactor − inkoopfactor Pronkert) × uurloon. Overname-waarde = marge/uur × kosteloze-overname-uren: dat is de marge die je opbouwt vóór de klant de flexkracht gratis mag overnemen. Vul per klant je afgesproken factor + overname-uren in bij Instellingen.</p></div>`;
+    ${st.nGestopt ? `<h3 class="mt">Afgerond / gestopt — verdiende marge</h3>
+    <div class="table-wrap"><table>
+    <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Gewerkte uren</th><th class="num">Verdiend</th><th></th></tr>
+    ${afgerondRows}</table></div>` : ''}
+    <p class="muted mt">Marge/uur = (klantfactor − inkoopfactor Pronkert) × uurloon. <b>Verdiend</b> = marge/uur × werkelijk gewerkte uren — dat is het geld dat je écht hebt gemaakt. Vul de gewerkte uren in bij het stoppen (of tussentijds via ✎). Afgeronde flexkrachten tellen niet meer mee in "actief lopend", maar hun verdiende marge blijft geteld.</p></div>`;
+}
+
+function openFlexStopModal(fp) {
+  const b = flexPlBerekening(fp);
+  // schat gewerkte uren op basis van startdatum als er nog niets is ingevuld
+  const wkn = fp.start ? Math.max(0, daysBetween(fp.start, todayISO()) / 7) : 0;
+  const schatUren = Math.round(wkn * (Number(fp.uren_pw) || 40));
+  openModal(`
+    <div class="modal-head"><h2>Flexkracht stoppen · ${esc(fp.kandidaat)}</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+    <div class="form-grid">
+      <div><label>Gestopt op</label><input id="fs_datum" type="date" value="${todayISO()}"></div>
+      <div><label>Totaal gewerkte uren</label><input id="fs_uren" type="number" step="1" value="${fp.gewerkte_uren ?? schatUren}"></div>
+    </div>
+    <div id="fs_preview" class="note"></div>
+    <p class="muted">De verdiende marge = marge/uur × gewerkte uren. Dit blijft geteld als gemaakt geld, maar de flexkracht verdwijnt uit "actief lopend".</p>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
+    <button class="btn primary" id="fs_ok">Stoppen & vastleggen</button></div>`, { narrow: true });
+  const prev = () => {
+    const u = Number($('#fs_uren').value || 0);
+    $('#fs_preview').innerHTML = b.margePerUur != null
+      ? `${eur2(b.margePerUur)}/uur × ${u} uur = verdiend <b style="color:var(--green)">${eur(b.margePerUur * u)}</b>`
+      : 'Vul eerst uurloon + factor in (via ✎) om de verdiende marge te zien.';
+  };
+  $('#fs_uren').addEventListener('input', prev); prev();
+  $('#fs_ok').onclick = async () => {
+    await dbWrite('fin_flex_plaatsingen', t => t.update({
+      gestopt_op: $('#fs_datum').value, gewerkte_uren: $('#fs_uren').value ? Number($('#fs_uren').value) : null,
+    }).eq('id', fp.id));
+    await reload('fin_flex_plaatsingen', 'flexPl', 'id');
+    closeModal(); toast('Flexkracht afgerond ✓'); rerender();
+  };
 }
 
 function openFlexPlModal(fp = null) {
@@ -132,6 +168,7 @@ function openFlexPlModal(fp = null) {
       <div><label>Uren per week</label><input id="fp_uren" type="number" step="1" value="${fp?.uren_pw ?? 40}"></div>
       <div><label>Kosteloze overname na (uren)</label><input id="fp_overname" type="number" step="1" value="${fp?.overname_uren ?? ''}" placeholder="${afspr?.overname_uren ?? 'bijv. 1200'}"></div>
       <div><label>Startdatum</label><input id="fp_start" type="date" value="${esc(fp?.start || todayISO())}"></div>
+      <div><label>Gewerkte uren tot nu (optioneel)</label><input id="fp_gewerkt" type="number" step="1" value="${fp?.gewerkte_uren ?? ''}"></div>
     </div>
     <div id="fp_preview" class="note"></div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
@@ -158,6 +195,7 @@ function openFlexPlModal(fp = null) {
       inkoop_factor: $('#fp_inkoop').value ? Number($('#fp_inkoop').value) : null,
       overname_uren: $('#fp_overname').value ? Number($('#fp_overname').value) : null,
       uren_pw: Number($('#fp_uren').value || 40), start: $('#fp_start').value || null, concept: false,
+      gewerkte_uren: $('#fp_gewerkt').value ? Number($('#fp_gewerkt').value) : null,
     };
     if (!row.kandidaat || !row.klant) return toast('Naam en klant zijn verplicht', true);
     await dbWrite('fin_flex_plaatsingen', t => fp ? t.update(row).eq('id', fp.id) : t.insert(row));
