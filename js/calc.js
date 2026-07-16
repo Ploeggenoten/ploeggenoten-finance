@@ -514,6 +514,43 @@ function yukiBetaaldSuggesties() {
   return uit;
 }
 
+// Yuki toont een verstuurde factuur → zet de bijbehorende termijn automatisch op "gefactureerd"
+// Strikte match (voornaam in omschrijving + bedrag incl btw ±€2) zodat er nooit verkeerd wordt gemarkeerd.
+async function yukiGefactureerdSync() {
+  const debOpen = D.yukiOpen.filter(r => r.soort === 'debiteur' && +r.open_bedrag > 0);
+  if (!debOpen.length) return 0;
+  const btw = 1 + Number(S('btw_pct', .21));
+  const gebruikt = new Set();          // elke Yuki-factuur matcht maar één termijn
+  let n = 0;
+  for (const p of D.placements) {
+    if (p.concept) continue;
+    const voornaam = (p.kandidaat || '').toLowerCase().split(' ')[0];
+    const achternaam = (p.kandidaat || '').toLowerCase().split(' ').slice(-1)[0];
+    for (const i of instOf(p.id)) {
+      if (i.status !== 'te_factureren') continue;
+      const inclBtw = +i.bedrag_excl * btw;
+      const match = debOpen.find(r => {
+        if (gebruikt.has(r.id)) return false;
+        const oms = (r.omschrijving || '').toLowerCase();
+        const naamHit = (voornaam && oms.includes(voornaam)) || (achternaam.length > 3 && oms.includes(achternaam));
+        if (!naamHit) return false;
+        const bedragHit = Math.abs(+r.origineel_bedrag - inclBtw) < 2 || Math.abs(+r.open_bedrag - inclBtw) < 2;
+        // termijnnummer uit omschrijving ("2/7" of "2 van 7"): moet exact kloppen als het er staat
+        const tm = oms.match(/(\d+)\s*(?:\/|van)\s*(\d+)/);
+        if (tm) return Number(tm[1]) === i.termijn_nr;
+        return bedragHit;         // geen termijnnummer → val terug op bedrag (uniek genoeg bij 1 termijn)
+      });
+      if (match) {
+        gebruikt.add(match.id);
+        await dbWrite('fin_installments', t => t.update({ status: 'gefactureerd', factuurdatum: match.datum || todayISO() }).eq('id', i.id));
+        n++;
+      }
+    }
+  }
+  if (n) await reload('fin_installments', 'installments', 'geplande_datum');
+  return n;
+}
+
 function yukiBewaking() {
   const gesynct = S('yuki_synced_at');
   if (!gesynct) return null;
