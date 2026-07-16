@@ -1,19 +1,18 @@
 # Ploeggenoten Finance
 
 Financiële cockpit voor Ploeggenoten BV — planningslaag naast Yuki.
-Draait op dezelfde Supabase-database als het [pijplijnbord](https://ploeggenotenpipeline.netlify.app), maar alle finance-tabellen zijn via Row Level Security afgeschermd: alleen `tjeerd@ploeggenoten.nl` kan erbij.
 
-## Eerste keer installeren
+**Live:** https://ploeggenoten.github.io/ploeggenoten-finance/ (GitHub Pages, deploy = push naar `main`)
 
-1. **Database**: ga naar [supabase.com](https://supabase.com) → jouw project → *SQL Editor* en draai achtereenvolgens:
-   - `supabase/schema.sql` (tabellen + beveiliging + startwaarden)
-   - `supabase/seed.sql` (je historische data uit Excel: P001–P027)
-2. **Online zetten**: ga naar [app.netlify.com/drop](https://app.netlify.com/drop) en sleep deze **hele map** erin. Klaar.
-3. Log in met je pijplijnbord-account (tjeerd@ploeggenoten.nl).
+Draait op dezelfde Supabase-database als het [pijplijnbord](https://ploeggenoten.github.io/pijplijnbord/), maar alle finance-tabellen zijn via Row Level Security afgeschermd: alleen `tjeerd@ploeggenoten.nl` kan erbij. Inloggen met het pijplijnbord-account.
+
+## Database (eenmalig, al gedaan op 16-07-2026)
+
+Supabase → *SQL Editor* → draai `supabase/schema.sql` en daarna `supabase/seed.sql`. Beide zijn idempotent (veilig om opnieuw te draaien).
 
 ## Bijwerken na een code-wijziging
 
-Sleep de map opnieuw naar Netlify (*Deploys → drag & drop*), of vraag Claude om het te doen.
+`git push` naar `main` — GitHub Pages deployt automatisch binnen ±1 minuut. Het deploy-token staat lokaal in `~/.config/ploeggenoten/github_token` (niet in de repo).
 
 ## Structuur
 
