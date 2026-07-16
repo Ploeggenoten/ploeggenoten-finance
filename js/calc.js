@@ -3,6 +3,9 @@
 const instOf = pid => D.installments.filter(i => i.placement_id === pid)
   .sort((a, b) => a.termijn_nr - b.termijn_nr);
 
+// flex = detachering (oud label); accepteer beide zodat resterende data niet lekt
+const isFlexType = t => { const x = (t || '').toLowerCase(); return x === 'flex' || x === 'detachering'; };
+
 function vervaldatum(inst, p) {
   const basis = inst.factuurdatum || inst.geplande_datum;
   return basis ? addDays(basis, Number(p?.betaaltermijn_dgn) || 14) : null;
@@ -55,7 +58,7 @@ function inboxCandidates() {
   return D.candidates.filter(c =>
     (PLACED_FASES.includes(c.fase) || c.geplaatst_op) &&
     c.fase !== 'Afgevallen' &&
-    (c.type || '') !== 'Detachering' &&          // flex loopt via Pronkert, niet via W&S-facturatie
+    !isFlexType(c.type) &&                        // flex loopt via Pronkert, niet via W&S-facturatie
     !(c.vervangt || '') &&                        // garantievervangers zijn geen nieuwe fee
     !linked.has(c.id) && !dismissed.has(c.id) &&
     !byName.has((c.naam || '').trim().toLowerCase()));
@@ -277,14 +280,15 @@ async function autoCreatePlacements() {
   return gemaakt;
 }
 
-// flex-kandidaten (type Flex) die contract-getekend zijn → flex-plaatsing
+// flex-kandidaten (type Flex) die NU actief geplaatst zijn → flex-plaatsing
 async function autoCreateFlexPlacements() {
   const linked = new Set(D.flexPl.map(f => f.pipeline_candidate_id).filter(Boolean));
   const dismissed = new Set(D.dismissed.map(d => d.candidate_id));
   const byName = new Set(D.flexPl.map(f => (f.kandidaat || '').trim().toLowerCase()));
   const nieuw = D.candidates.filter(c =>
-    (c.type || '') === 'Flex' &&
-    (PLACED_FASES.includes(c.fase) || c.geplaatst_op) && c.fase !== 'Afgevallen' &&
+    isFlexType(c.type) &&
+    PLACED_FASES.includes(c.fase) &&           // alléén nu-actieve fases (Contract getekend/Gestart), niet historisch geplaatst-en-gestopt
+    !c.gestopt_op &&                           // al gestopt op het bord? niet als actieve flexkracht aanmaken
     !linked.has(c.id) && !dismissed.has(c.id) && !byName.has((c.naam || '').trim().toLowerCase()));
   let gemaakt = 0;
   for (const c of nieuw) {
@@ -301,6 +305,38 @@ async function autoCreateFlexPlacements() {
   }
   if (gemaakt) { await reload('fin_flex_plaatsingen', 'flexPl', 'id'); toast(`${gemaakt} nieuwe flexkracht(en) van het bord — vul de uren/marge aan`); }
   return gemaakt;
+}
+
+// als een gekoppelde kandidaat op het bord gestopt is → plaatsing automatisch naar gestopt
+async function autoStopFromBoard() {
+  const bordGestopt = id => {
+    const c = D.candidates.find(x => x.id === id);
+    return c && c.gestopt_op ? c.gestopt_op : null;
+  };
+  let n = 0;
+  for (const p of D.placements) {
+    if (p.gestopt_op || !p.pipeline_candidate_id) continue;
+    const d = bordGestopt(p.pipeline_candidate_id);
+    if (!d) continue;
+    await dbWrite('fin_placements', t => t.update({ gestopt_op: d, updated_at: new Date().toISOString() }).eq('id', p.id));
+    n++;
+  }
+  for (const f of D.flexPl) {
+    if (f.gestopt_op || !f.pipeline_candidate_id) continue;
+    const d = bordGestopt(f.pipeline_candidate_id);
+    if (!d) continue;
+    await dbWrite('fin_flex_plaatsingen', t => t.update({ gestopt_op: d }).eq('id', f.id));
+    n++;
+  }
+  if (n) {
+    await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_flex_plaatsingen', 'flexPl', 'id')]);
+    // W&S: gestopte termijnen na stop+marge laten vervallen
+    for (const p of D.placements) if (p.gestopt_op) for (const i of stopImpact(p))
+      await dbWrite('fin_installments', t => t.update({ status: 'vervallen' }).eq('id', i.id));
+    await reload('fin_installments', 'installments', 'geplande_datum');
+    toast(`${n} plaatsing(en) automatisch naar gestopt (bord)`);
+  }
+  return n;
 }
 
 // ── gewogen pijplijn-forecast ──────────────────────────────────
@@ -325,7 +361,7 @@ function pipelineForecast() {
   const t = todayISO();
   const linked = new Set(D.placements.map(p => p.pipeline_candidate_id).filter(Boolean));
   const rows = D.candidates.filter(c =>
-    kansen[c.fase] > 0 && (c.type || '') !== 'Detachering' &&
+    kansen[c.fase] > 0 && !isFlexType(c.type) &&
     !(c.vervangt || '') && !linked.has(c.id))
     .map(c => {
       const kans = kansen[c.fase];
