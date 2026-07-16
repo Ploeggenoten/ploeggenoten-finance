@@ -44,7 +44,9 @@ function renderFlex(root) {
 
     <div class="panel mb"><h2>📈 Wekelijkse marge</h2>${chart}</div>
 
-    <div class="panel"><h2>Laatste weken</h2>
+    ${flexPlaatsingenPanel()}
+
+    <div class="panel"><h2>Laatste weken (uitbetaald door Pronkert)</h2>
       <div class="table-wrap"><table>
       <tr><th>Week</th><th class="num">Marge excl. btw</th><th class="num">Flexkrachten</th><th>Notitie</th><th></th></tr>
       ${rows || '<tr><td colspan="5" class="empty">Nog geen weken ingevoerd. Zodra de eerste uitbetaling van Pronkert binnen is: invoeren maar.</td></tr>'}
@@ -52,17 +54,116 @@ function renderFlex(root) {
       <p class="muted mt">Vul het uitgekeerde bedrag excl. btw in. De cashflow-projectie rekent met het gemiddelde van je laatste 4 weken; op Cashflow kun je met de flex-schuif spelen (groei of wegval).</p></div>`;
 
   $('#fxNieuw').onclick = () => openFlexModal();
+  $('#fpNieuw') && ($('#fpNieuw').onclick = () => openFlexPlModal());
   root.addEventListener('click', e => {
     const ed = e.target.closest('[data-fedit]');
     if (ed) return openFlexModal(D.flex.find(w => w.id === +ed.dataset.fedit));
     const del = e.target.closest('[data-fdel]');
-    if (del) (async () => {
+    if (del) return (async () => {
       if (!confirm('Deze week verwijderen?')) return;
       await dbWrite('fin_flex_weken', t => t.delete().eq('id', +del.dataset.fdel));
-      await reload('fin_flex_weken', 'flex', 'week');
-      rerender();
+      await reload('fin_flex_weken', 'flex', 'week'); rerender();
+    })();
+    const pe = e.target.closest('[data-fpedit]');
+    if (pe) return openFlexPlModal(D.flexPl.find(f => f.id === +pe.dataset.fpedit));
+    const ps = e.target.closest('[data-fpstop]');
+    if (ps) return (async () => {
+      const fp = D.flexPl.find(f => f.id === +ps.dataset.fpstop);
+      const datum = prompt(`Gestopt op (JJJJ-MM-DD) voor ${fp.kandidaat}:`, todayISO());
+      if (!datum) return;
+      await dbWrite('fin_flex_plaatsingen', t => t.update({ gestopt_op: datum }).eq('id', fp.id));
+      await reload('fin_flex_plaatsingen', 'flexPl', 'id'); toast('Flexkracht gestopt'); rerender();
+    })();
+    const pd = e.target.closest('[data-fpdel]');
+    if (pd) return (async () => {
+      if (!confirm('Deze flex-plaatsing verwijderen?')) return;
+      await dbWrite('fin_flex_plaatsingen', t => t.delete().eq('id', +pd.dataset.fpdel));
+      await reload('fin_flex_plaatsingen', 'flexPl', 'id'); rerender();
     })();
   });
+}
+
+// ── flex-plaatsingen (marge-motor) ─────────────────────────────
+function flexPlaatsingenPanel() {
+  const st = flexPlStats();
+  const rows = st.rows.map(r => {
+    const f = r.f;
+    const tags = [];
+    if (f.concept) tags.push(tag('✨ vul aan', 'amber'));
+    if (!r.compleet) tags.push(tag('uurloon/factor mist', 'gray'));
+    return `<tr>
+      <td><b>${esc(f.kandidaat)}</b><br><span class="muted">${esc(f.klant)}</span> ${tags.join(' ')}</td>
+      <td class="num">${r.uurloon ? eur2(r.uurloon) : '—'}</td>
+      <td class="num">${r.klantfactor ? r.klantfactor.toFixed(2) : '—'} <span class="muted">− ${r.inkoop.toFixed(2)}</span></td>
+      <td class="num">${r.margePerUur != null ? eur2(r.margePerUur) : '—'}</td>
+      <td class="num">${r.margePerMaand != null ? eur(r.margePerMaand) : '—'}</td>
+      <td class="num">${r.overnameUren ? r.overnameUren + ' u' : '—'}</td>
+      <td class="num">${r.overnameWaarde != null ? `<b>${eur(r.overnameWaarde)}</b>` : '—'}</td>
+      <td class="right"><button class="btn small ghost" data-fpedit="${f.id}">✎</button>
+        <button class="btn small ghost" data-fpstop="${f.id}" title="Gestopt">⏹</button>
+        <button class="btn small ghost" data-fpdel="${f.id}">✕</button></td></tr>`;
+  }).join('');
+  return `<div class="panel mb"><div class="spread mb"><h2>👷 Flexkrachten via Pronkert <span class="muted">— verwachte marge</span></h2>
+      <button class="btn primary small" id="fpNieuw">+ Flexkracht</button></div>
+    <div class="grid cols-3 mb">
+      <div class="kpi"><div class="lbl">Actieve flexkrachten</div><div class="val">${st.nActief}</div><div class="sub">${st.nConcept ? st.nConcept + ' nog aan te vullen' : 'allemaal compleet'}</div></div>
+      <div class="kpi good"><div class="lbl">Verwachte marge p/m</div><div class="val">${eur(st.margePerMaand)}</div><div class="sub">op basis van contracturen</div></div>
+      <div class="kpi"><div class="lbl">Overname-potentieel</div><div class="val">${eur(st.overnamePotentieel)}</div><div class="sub">marge tot kosteloze overname</div></div>
+    </div>
+    <div class="table-wrap"><table>
+    <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Marge/mnd</th><th class="num">Overname-uren</th><th class="num">Overname-waarde</th><th></th></tr>
+    ${rows || '<tr><td colspan="8" class="empty">Nog geen flexkrachten. Voeg ze toe of ze verschijnen automatisch vanuit het bord (fase Gestart, type Flex).</td></tr>'}
+    </table></div>
+    <p class="muted mt">Marge/uur = (klantfactor − inkoopfactor Pronkert) × uurloon. Overname-waarde = marge/uur × kosteloze-overname-uren: dat is de marge die je opbouwt vóór de klant de flexkracht gratis mag overnemen. Vul per klant je afgesproken factor + overname-uren in bij Instellingen.</p></div>`;
+}
+
+function openFlexPlModal(fp = null) {
+  const klanten = [...new Set([...D.flexAfspr.map(a => a.klant), ...D.flexPl.map(f => f.klant), ...D.clients.map(c => c.naam)])].sort();
+  const afspr = fp ? flexAfspraakVoor(fp.klant) : null;
+  openModal(`
+    <div class="modal-head"><h2>${fp ? 'Flexkracht bewerken' : 'Nieuwe flexkracht'}</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+    <div class="form-grid">
+      <div><label>Naam</label><input id="fp_naam" value="${esc(fp?.kandidaat || '')}"></div>
+      <div><label>Klant</label><input id="fp_klant" list="fpKlant" value="${esc(fp?.klant || '')}">
+        <datalist id="fpKlant">${klanten.map(k => `<option value="${esc(k)}">`).join('')}</datalist></div>
+      <div><label>Bruto uurloon (€)</label><input id="fp_uurloon" type="number" step="0.01" value="${fp?.uurloon ?? ''}"></div>
+      <div><label>Klantfactor</label><input id="fp_factor" type="number" step="0.01" value="${fp?.klantfactor ?? ''}" placeholder="${afspr ? afspr.factor : 'bijv. 2.45'}"></div>
+      <div><label>Inkoopfactor Pronkert</label><input id="fp_inkoop" type="number" step="0.01" value="${fp?.inkoop_factor ?? ''}" placeholder="${S('flex_inkoop_factor', 1.8)}"></div>
+      <div><label>Uren per week</label><input id="fp_uren" type="number" step="1" value="${fp?.uren_pw ?? 40}"></div>
+      <div><label>Kosteloze overname na (uren)</label><input id="fp_overname" type="number" step="1" value="${fp?.overname_uren ?? ''}" placeholder="${afspr?.overname_uren ?? 'bijv. 1200'}"></div>
+      <div><label>Startdatum</label><input id="fp_start" type="date" value="${esc(fp?.start || todayISO())}"></div>
+    </div>
+    <div id="fp_preview" class="note"></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
+    <button class="btn primary" id="fp_save">Opslaan</button></div>`);
+
+  const preview = () => {
+    const dummy = {
+      klant: $('#fp_klant').value, uurloon: $('#fp_uurloon').value, klantfactor: $('#fp_factor').value,
+      inkoop_factor: $('#fp_inkoop').value, uren_pw: $('#fp_uren').value, overname_uren: $('#fp_overname').value,
+    };
+    const b = flexPlBerekening(dummy);
+    $('#fp_preview').innerHTML = b.compleet
+      ? `Marge/uur = (${b.klantfactor.toFixed(2)} − ${b.inkoop.toFixed(2)}) × ${eur2(b.uurloon)} = <b>${eur2(b.margePerUur)}</b> · per maand ~<b>${eur(b.margePerMaand)}</b>${b.overnameWaarde ? ` · tot overname (${b.overnameUren} u): <b>${eur(b.overnameWaarde)}</b>` : ''}`
+      : 'Vul uurloon én klantfactor in om de marge te zien.';
+  };
+  ['fp_klant', 'fp_uurloon', 'fp_factor', 'fp_inkoop', 'fp_uren', 'fp_overname'].forEach(id => $('#' + id).addEventListener('input', preview));
+  preview();
+
+  $('#fp_save').onclick = async () => {
+    const row = {
+      kandidaat: $('#fp_naam').value.trim(), klant: $('#fp_klant').value.trim(),
+      uurloon: $('#fp_uurloon').value ? Number($('#fp_uurloon').value) : null,
+      klantfactor: $('#fp_factor').value ? Number($('#fp_factor').value) : null,
+      inkoop_factor: $('#fp_inkoop').value ? Number($('#fp_inkoop').value) : null,
+      overname_uren: $('#fp_overname').value ? Number($('#fp_overname').value) : null,
+      uren_pw: Number($('#fp_uren').value || 40), start: $('#fp_start').value || null, concept: false,
+    };
+    if (!row.kandidaat || !row.klant) return toast('Naam en klant zijn verplicht', true);
+    await dbWrite('fin_flex_plaatsingen', t => fp ? t.update(row).eq('id', fp.id) : t.insert(row));
+    await reload('fin_flex_plaatsingen', 'flexPl', 'id');
+    closeModal(); toast('Flexkracht opgeslagen ✓'); rerender();
+  };
 }
 
 function openFlexModal(w = null) {

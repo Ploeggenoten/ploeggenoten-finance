@@ -39,6 +39,19 @@ function renderInstellingen(root) {
       ${tariefRows || '<tr><td colspan="5" class="empty">Nog geen tarieven — voeg per klant je afgesproken W&S-percentage toe. De fee wordt dan automatisch: maandloon × (1+toeslag) × 12,96 × tarief.</td></tr>'}
       </table></div>
       <p class="muted mt">Een rij zónder functie geldt als standaard voor die klant; een rij mét functie gaat vóór (bijv. "Kok" bij Starcuisine een ander percentage). Maandloon en ploegentoeslag vult je AM in op het pijplijnbord.</p></div>
+    <div class="panel mb"><div class="spread mb"><h2>👷 Flex-afspraken per klant</h2>
+      <button class="btn primary small" id="faNieuw">+ Flex-afspraak</button></div>
+      <div class="table-wrap"><table>
+      <tr><th>Klant</th><th class="num">Klantfactor</th><th class="num">Inkoopfactor</th><th class="num">Marge-factor</th><th class="num">Overname na (u)</th><th>Notitie</th><th></th></tr>
+      ${D.flexAfspr.map(a => `<tr><td>${esc(a.klant)}</td><td class="num">${Number(a.factor).toFixed(2)}</td>
+        <td class="num">${a.inkoop_factor ? Number(a.inkoop_factor).toFixed(2) : Number(S('flex_inkoop_factor', 1.8)).toFixed(2)}</td>
+        <td class="num"><b>${(Number(a.factor) - Number(a.inkoop_factor || S('flex_inkoop_factor', 1.8))).toFixed(2)}</b></td>
+        <td class="num">${a.overname_uren || '—'}</td><td class="muted">${esc(a.note || '')}</td>
+        <td class="right"><button class="btn small ghost" data-faedit="${a.id}">✎</button>
+        <button class="btn small ghost" data-fadel="${a.id}">✕</button></td></tr>`).join('')
+        || '<tr><td colspan="7" class="empty">Nog geen flex-afspraken. Voeg per klant je factor toe (bijv. Proponent 2,45).</td></tr>'}
+      </table></div>
+      <p class="muted mt">Marge-factor = klantfactor − inkoopfactor Pronkert (standaard ${Number(S('flex_inkoop_factor', 1.8)).toFixed(2)}). Op het Flex-tabblad wordt hiermee per flexkracht de marge per uur en de overname-waarde berekend.</p></div>
     <div class="grid cols-2 mt">
       <div class="panel"><h2>⚙️ Parameters</h2>${rows}
         <div class="modal-foot"><button class="btn primary" id="setSave">Opslaan</button></div>
@@ -71,6 +84,17 @@ function renderInstellingen(root) {
     e.target.disabled = true; e.target.textContent = 'Bezig…';
     await yukiSync(false);
   };
+  $('#faNieuw').onclick = () => openFlexAfsprModal(null, klanten);
+  root.addEventListener('click', async e => {
+    const ed = e.target.closest('[data-faedit]');
+    if (ed) return openFlexAfsprModal(D.flexAfspr.find(a => a.id === +ed.dataset.faedit), klanten);
+    const del = e.target.closest('[data-fadel]');
+    if (del) {
+      if (!confirm('Deze flex-afspraak verwijderen?')) return;
+      await dbWrite('fin_flex_afspraken', t => t.delete().eq('id', +del.dataset.fadel));
+      await reload('fin_flex_afspraken', 'flexAfspr', 'klant'); rerender();
+    }
+  });
   $('#tNieuw').onclick = () => openTariefModal(null, klanten);
   root.addEventListener('click', async e => {
     const ed = e.target.closest('[data-tedit]');
@@ -92,6 +116,33 @@ function renderInstellingen(root) {
     }
     toast('Instellingen opgeslagen ✓'); rerender();
   };
+  window.openFlexAfsprModal = (a, klantLijst) => {
+    openModal(`
+      <div class="modal-head"><h2>${a ? 'Flex-afspraak bewerken' : 'Nieuwe flex-afspraak'}</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+      <div class="form-grid">
+        <div class="span2"><label>Klant</label><input id="fa_klant" list="faKlant" value="${esc(a?.klant || '')}">
+          <datalist id="faKlant">${klantLijst.map(k => `<option value="${esc(k)}">`).join('')}</datalist></div>
+        <div><label>Klantfactor</label><input id="fa_factor" type="number" step="0.01" value="${a?.factor ?? ''}" placeholder="2.45"></div>
+        <div><label>Inkoopfactor Pronkert</label><input id="fa_inkoop" type="number" step="0.01" value="${a?.inkoop_factor ?? ''}" placeholder="${S('flex_inkoop_factor', 1.8)}"></div>
+        <div><label>Kosteloze overname na (uren)</label><input id="fa_overname" type="number" step="1" value="${a?.overname_uren ?? ''}" placeholder="1200"></div>
+        <div class="span2"><label>Notitie</label><input id="fa_note" value="${esc(a?.note || '')}"></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
+      <button class="btn primary" id="fa_save">Opslaan</button></div>`, { narrow: true });
+    $('#fa_save').onclick = async () => {
+      const row = {
+        klant: $('#fa_klant').value.trim(), factor: Number($('#fa_factor').value),
+        inkoop_factor: $('#fa_inkoop').value ? Number($('#fa_inkoop').value) : null,
+        overname_uren: $('#fa_overname').value ? Number($('#fa_overname').value) : null,
+        note: $('#fa_note').value.trim() || null,
+      };
+      if (!row.klant || !row.factor) return toast('Klant en klantfactor zijn verplicht', true);
+      await dbWrite('fin_flex_afspraken', t => a ? t.update(row).eq('id', a.id) : t.insert(row));
+      await reload('fin_flex_afspraken', 'flexAfspr', 'klant');
+      closeModal(); toast('Flex-afspraak opgeslagen ✓'); rerender();
+    };
+  };
+
   window.openTariefModal = (r, klantLijst) => {
     openModal(`
       <div class="modal-head"><h2>${r ? 'Tarief bewerken' : 'Nieuw tarief'}</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>

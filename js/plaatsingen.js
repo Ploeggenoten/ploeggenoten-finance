@@ -323,8 +323,11 @@ function renderPlaatsingen(root) {
     <td class="num">${k.winstIndicatie != null ? eur(k.winstIndicatie) : '—'}</td></tr>`).join('');
   const kTot = klantRows.reduce((t, k) => ({ n: t.n + k.n, fee: t.fee + k.fee, gefact: t.gefact + k.gefact, betaald: t.betaald + k.betaald, open: t.open + k.open, nog: t.nog + k.nog, vervallen: t.vervallen + k.vervallen, netto: t.netto + k.netto, w: t.w + (k.winstIndicatie || 0) }), { n: 0, fee: 0, gefact: 0, betaald: 0, open: 0, nog: 0, vervallen: 0, netto: 0, w: 0 });
 
+  const nTotaal = D.placements.length;
+  const nActief = D.placements.filter(p => !p.gestopt_op).length;
+  const nGestopt = D.placements.filter(p => p.gestopt_op).length;
   root.innerHTML = `
-    <div class="spread mb"><h1>Plaatsingen</h1>
+    <div class="spread mb"><h1>Plaatsingen <span style="font-family:var(--font);font-size:15px;font-weight:600;color:var(--muted)">· ${plFilter.klant ? zichtbaar.length + ' bij ' + esc(plFilter.klant) : nTotaal + ' totaal · ' + nActief + ' actief · ' + nGestopt + ' gestopt'}</span></h1>
       <div class="row">
         <select id="plKlant" style="width:auto">
           <option value="">Alle klanten</option>

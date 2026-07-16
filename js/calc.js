@@ -123,6 +123,43 @@ function acties() {
   return list.sort((a, b) => b.urg - a.urg);
 }
 
+// ── flex-plaatsingen: marge per uur/week + overname-waarde ─────
+// marge/uur = (klantfactor − inkoopfactor) × uurloon
+function flexAfspraakVoor(klant) {
+  const nk = normKlant(klant);
+  return D.flexAfspr.find(a => normKlant(a.klant).startsWith(nk.slice(0, 6)) || nk.startsWith(normKlant(a.klant).slice(0, 6)));
+}
+
+function flexPlBerekening(fp) {
+  const afspr = flexAfspraakVoor(fp.klant);
+  const klantfactor = Number(fp.klantfactor) || (afspr ? Number(afspr.factor) : null);
+  const inkoop = Number(fp.inkoop_factor) || (afspr ? Number(afspr.inkoop_factor) : Number(S('flex_inkoop_factor', 1.8)));
+  const overnameUren = fp.overname_uren != null ? Number(fp.overname_uren) : (afspr ? Number(afspr.overname_uren) : null);
+  const uurloon = Number(fp.uurloon) || null;
+  const urenPw = Number(fp.uren_pw) || 40;
+  const compleet = klantfactor && uurloon;
+  const margePerUur = compleet ? (klantfactor - inkoop) * uurloon : null;
+  return {
+    klantfactor, inkoop, uurloon, urenPw, overnameUren, compleet, margePerUur,
+    margePerWeek: compleet ? margePerUur * urenPw : null,
+    margePerMaand: compleet ? margePerUur * urenPw * 52 / 12 : null,
+    // totale marge tot de kosteloze overname (het bedrag dat je "verdient" vóór de klant gratis mag overnemen)
+    overnameWaarde: compleet && overnameUren ? margePerUur * overnameUren : null,
+  };
+}
+
+function flexPlStats() {
+  const actief = D.flexPl.filter(f => !f.gestopt_op);
+  const rows = actief.map(f => ({ f, ...flexPlBerekening(f) }));
+  const compleet = rows.filter(r => r.compleet);
+  return {
+    rows,
+    nActief: actief.length, nCompleet: compleet.length, nConcept: rows.filter(r => r.f.concept).length,
+    margePerMaand: compleet.reduce((s, r) => s + r.margePerMaand, 0),
+    overnamePotentieel: compleet.reduce((s, r) => s + (r.overnameWaarde || 0), 0),
+  };
+}
+
 // ── flex (wekelijkse marge-uitkering Pronkert) ─────────────────
 function flexStats() {
   const wk = D.flex.slice().sort((a, b) => a.week.localeCompare(b.week));

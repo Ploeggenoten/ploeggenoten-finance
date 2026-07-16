@@ -4,7 +4,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const D = {            // alle data, geladen in loadAll()
   placements: [], installments: [], budget: [], actuals: [],
   saldi: [], tx: [], loans: [], loanPayments: [], settings: {},
-  dismissed: [], candidates: [], clients: [], flex: [], targets: [], tarieven: [], yukiOpen: [],
+  dismissed: [], candidates: [], clients: [], flex: [], targets: [], tarieven: [], yukiOpen: [], flexPl: [], flexAfspr: [],
 };
 
 const $ = s => document.querySelector(s);
@@ -59,7 +59,7 @@ async function loadAll() {
     if (order) r = r.order(order.col, { ascending: order.asc !== false });
     return r;
   };
-  const [pl, inst, bud, act, sal, tx, ln, lp, st, dis, fx, trf, yo, cand, cli, tgt] = await Promise.all([
+  const [pl, inst, bud, act, sal, tx, ln, lp, st, dis, fx, trf, yo, fpl, faf, cand, cli, tgt] = await Promise.all([
     q('fin_placements', { col: 'id' }),
     q('fin_installments', { col: 'geplande_datum' }),
     q('fin_costs_budget', { col: 'vanaf_maand' }),
@@ -73,6 +73,8 @@ async function loadAll() {
     q('fin_flex_weken', { col: 'week' }),
     q('fin_tarieven', { col: 'klant' }),
     q('fin_yuki_open', { col: 'datum' }),
+    q('fin_flex_plaatsingen', { col: 'id' }),
+    q('fin_flex_afspraken', { col: 'klant' }),
     q('candidates'),
     q('clients'),
     q('targets'),
@@ -85,6 +87,7 @@ async function loadAll() {
   D.settings = Object.fromEntries((st.data || []).map(r => [r.key, r.value]));
   D.dismissed = dis.data; D.flex = fx.data; D.tarieven = trf.data;
   D.yukiOpen = yo.error ? [] : yo.data;   // open posten uit Yuki (tolerant: tabel kan leeg/nieuw zijn)
+  D.flexPl = fpl.error ? [] : fpl.data; D.flexAfspr = faf.error ? [] : faf.data;
   D.candidates = cand.error ? [] : cand.data;   // pijplijn kan onbereikbaar zijn — app blijft werken
   D.clients = cli.error ? [] : cli.data;
   D.targets = tgt.error ? [] : tgt.data;        // plaatsings-targets van het bord ({maand:'2026-07', aantal})
