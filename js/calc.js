@@ -108,6 +108,10 @@ function acties() {
   const saldo = D.saldi[0];
   if (!saldo || daysBetween(saldo.datum, t) > 14)
     list.push({ soort: 'saldo', urg: 1, txt: saldo ? `Banksaldo ${daysBetween(saldo.datum, t)} dgn oud — werk bij` : 'Vul je banksaldo in' });
+  // Yuki zegt: deze facturen staan niet meer open → waarschijnlijk betaald
+  for (const s of yukiBetaaldSuggesties())
+    list.push({ soort: 'yuki_betaald', urg: 1, p: s.p, i: s.i,
+      txt: `Yuki toont geen open post meer voor ${s.p.kandidaat} t${s.i.termijn_nr} (${eur(s.i.bedrag_excl)}) — betaald?` });
   // flex-bewaking: vorige week (ma t/m zo voorbij) nog niet ingevuld?
   if (D.flex.length) {
     const dag = (new Date(t + 'T12:00:00').getDay() + 6) % 7;      // ma=0
@@ -356,7 +360,41 @@ function budgetVoorMaand(mk) {
 }
 function actueelVoorMaand(mk) {
   const rows = D.actuals.filter(a => a.maand === mk);
+  // de Yuki-sync schrijft één totaalregel per afgesloten maand — die is dan leidend
+  const yuki = rows.find(a => a.categorie === 'Werkelijk totaal (Yuki)');
+  if (yuki) return Number(yuki.bedrag);
   return rows.length ? rows.reduce((s, a) => s + +a.bedrag, 0) : null;
+}
+
+// ── Yuki open posten: betaald-suggesties + bewaking ────────────
+function yukiBetaaldSuggesties() {
+  const debOpen = D.yukiOpen.filter(r => r.soort === 'debiteur');
+  if (!S('yuki_synced_at') || !D.yukiOpen.length) return [];   // pas suggesties doen als er ooit gesynct is
+  const uit = [];
+  for (const p of D.placements) {
+    if (p.concept) continue;
+    for (const i of instOf(p.id)) {
+      if (i.status !== 'gefactureerd' || !i.factuurdatum) continue;
+      if (daysBetween(i.factuurdatum, todayISO()) < 5) continue;   // te vers om conclusies te trekken
+      const naam = (p.kandidaat || '').toLowerCase().split(' ')[0];
+      const inclBtw = +i.bedrag_excl * (1 + Number(S('btw_pct', .21)));
+      const nogOpen = debOpen.some(r =>
+        (naam && (r.omschrijving || '').toLowerCase().includes(naam)) ||
+        Math.abs(+r.open_bedrag - inclBtw) < 1 || Math.abs(+r.origineel_bedrag - inclBtw) < 1);
+      if (!nogOpen) uit.push({ p, i });
+    }
+  }
+  return uit;
+}
+
+function yukiBewaking() {
+  const gesynct = S('yuki_synced_at');
+  if (!gesynct) return null;
+  const appOpenIncl = D.installments.filter(i => i.status === 'gefactureerd')
+    .reduce((s, i) => s + +i.bedrag_excl * (1 + Number(S('btw_pct', .21))), 0);
+  const yukiDeb = Number(S('yuki_debiteuren', 0));
+  return { appOpenIncl, yukiDeb, verschil: appOpenIncl - yukiDeb,
+    crediteuren: Number(S('yuki_crediteuren_open', 0)) };
 }
 
 // ── belastingpotjes (indicatief, factuurstelsel) ───────────────

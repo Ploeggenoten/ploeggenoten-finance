@@ -29,10 +29,11 @@ function renderVandaag(root) {
   const actieHtml = lijst.length ? lijst.map((a, idx) => {
     const wie = a.p ? `${esc(a.p.kandidaat)} · ${esc(a.p.klant)}` : (a.c ? `${esc(a.c.naam)} · ${esc(a.c.klant || '')}` : 'Algemeen');
     const bedrag = a.i ? ` · ${eur(a.i.bedrag_excl)} excl. btw` : '';
-    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢', concept: '✨' }[a.soort] || '•';
+    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢', concept: '✨', yuki_betaald: '🔗' }[a.soort] || '•';
     let btn = '';
     if (a.soort === 'factureren') btn = `<button class="btn small primary" data-act="factureer" data-idx="${idx}">Gefactureerd ✓</button>`;
     if (a.soort === 'te_laat') btn = `<button class="btn small primary" data-act="betaald" data-idx="${idx}">Betaald ✓</button>`;
+    if (a.soort === 'yuki_betaald') btn = `<button class="btn small primary" data-act="betaald" data-idx="${idx}">Betaald ✓</button>`;
     if (a.soort === 'afronden') btn = `<button class="btn small primary" data-act="afronden" data-idx="${idx}">Afronden →</button>`;
     if (a.soort === 'stop') btn = `<button class="btn small danger" data-act="stopverwerk" data-idx="${idx}">Termijnen vervallen</button>`;
     if (a.soort === 'stop_signaal') btn = `<button class="btn small danger" data-act="stopsignaal" data-idx="${idx}">Verwerk stop</button>`;
@@ -53,11 +54,13 @@ function renderVandaag(root) {
     <div class="pot"><span>Vervallen omzet (stops)</span><b>${eur(k.vervallen)}</b></div>
     <div class="pot"><span>DSO (gem. betaalduur)</span><b>${k.dso == null ? '—' : k.dso + ' dgn'}</b></div>`;
 
+  const bw = yukiBewaking();
   const potHtml = `
     <div class="pot"><span>Btw-potje dit kwartaal <span class="muted">(indicatief)</span></span><b>${eur(pot.btwPot)}</b></div>
     <div class="pot"><span>Vpb-reservering YTD (${pct(Number(S('vpb_pct', .19)))})</span><b>${eur(pot.vpbPot)}</b></div>
     <div class="pot"><span>Samen opzij te zetten</span><b>${eur(pot.btwPot + pot.vpbPot)}</b></div>
-    <div class="pot"><span>Winst-indicatie YTD</span><b>${eur(pot.winstYtd)}</b></div>`;
+    <div class="pot"><span>Winst-indicatie YTD${S('yuki_synced_at') ? ' <span class="muted">(live uit Yuki)</span>' : ''}</span><b>${eur(pot.winstYtd)}</b></div>
+    ${bw && bw.crediteuren > 0 ? `<div class="pot"><span>Nog te betalen inkoopfacturen (Yuki)</span><b>${eur(bw.crediteuren)}</b></div>` : ''}`;
 
   const top = adviesEngine().filter(a => a.urg >= 2).slice(0, 4);
   const iconOf = { gevaar: '🔴', kans: '🟡', sterkte: '🟢' };

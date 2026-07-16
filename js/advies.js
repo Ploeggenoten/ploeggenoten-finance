@@ -88,6 +88,16 @@ function adviesEngine() {
       `Zonder flex-inkomsten begint elke maand op nul: W&S-fees zijn eenmalig. Dat maakt je kwetsbaar voor een stille maand.`,
       `Bouw de flexpoot via Pronkert uit — elke flexkracht is wekelijkse marge die je vaste lasten draagt. Vul de weekbedragen in op het Flex-tabblad zodra ze binnenkomen.`);
 
+  // bewaking: klopt de app-administratie met de boekhouding (Yuki)?
+  const bw = yukiBewaking();
+  if (bw && Math.abs(bw.verschil) > 750) {
+    const richting = bw.verschil > 0
+      ? `De app verwacht ${eur(bw.appOpenIncl)} aan openstaande facturen (incl. btw), maar Yuki's debiteuren staan op ${eur(bw.yukiDeb)}. Mogelijk is een factuur al betaald (vink af — zie acties) of is een geplande factuur nooit in Yuki gezet.`
+      : `Yuki's debiteuren (${eur(bw.yukiDeb)}) zijn hóger dan wat de app verwacht (${eur(bw.appOpenIncl)}). Er staat dus omzet in de boekhouding die de app niet kent — bijv. een flex-factuur aan Pronkert of een losse factuur buiten het plaatsingenschema.`;
+    add('gevaar', 2, 'App en boekhouding lopen uiteen', eur(Math.abs(bw.verschil)) + ' verschil', richting,
+      `Loop de open posten na; de betaald-suggesties op Vandaag lossen het meestal al op.`);
+  }
+
   // target van het bord: hoe sta je ervoor deze maand?
   const tgt = targetInfo();
   if (tgt.aantalTarget) {
