@@ -148,6 +148,13 @@ function openPlacementWizard({ candidate = null, edit = null } = {}) {
         }));
     } else {
       await dbWrite('fin_placements', t => t.update(row).eq('id', p.id));
+      // concept met aangepaste fee: automatisch gegenereerde termijnen meeschalen
+      if (p.concept && row.fee_excl !== Number(p.fee_excl)) {
+        const oud = instOf(p.id).filter(i => i.status === 'te_factureren');
+        const per = Math.round(row.fee_excl / Math.max(1, oud.length) * 100) / 100;
+        for (const i of oud)
+          await dbWrite('fin_installments', t => t.update({ bedrag_excl: per }).eq('id', i.id));
+      }
     }
     await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_installments', 'installments', 'geplande_datum')]);
     closeModal(); toast(edit ? 'Opgeslagen' : `Plaatsing ${row.id} aangemaakt ✓`); rerender();
@@ -180,6 +187,7 @@ function openPlacementDetail(pid) {
     <div class="modal-head"><h2>${esc(p.id)} · ${esc(p.kandidaat)} <span class="muted">— ${esc(p.klant)}</span></h2>
       <button class="btn ghost small" onclick="closeModal()">✕</button></div>
     <div class="row mb">
+      ${p.concept ? tag('✨ CONCEPT — fee geschat, bevestig', 'amber') : ''}
       ${tag(st.status, st.kleur)}
       ${p.gestopt_op ? tag('gestopt ' + fmtD(p.gestopt_op), 'red') : ''}
       ${g.actief ? tag('garantie t/m ' + fmtD(g.tot), 'purple') : ''}
@@ -198,6 +206,7 @@ function openPlacementDetail(pid) {
     <div class="modal-foot">
       <button class="btn small ghost" id="d_addTermijn">+ termijn</button>
       <span style="flex:1"></span>
+      ${p.concept ? `<button class="btn primary" id="d_bevestig">✓ Fee klopt — bevestigen</button>` : ''}
       ${!p.gestopt_op ? `<button class="btn danger" id="d_stop">Kandidaat gestopt…</button>` : ''}
       ${g.vervangingNodig ? `<button class="btn" id="d_vervang">Vervanging geleverd…</button>` : ''}
       <button class="btn" id="d_edit">Bewerken</button>
@@ -217,6 +226,11 @@ function openPlacementDetail(pid) {
     }
     if (b.dataset.iact === 'edit') openInstallmentEdit(inst, pid);
   });
+  $('#d_bevestig') && ($('#d_bevestig').onclick = async () => {
+    await dbWrite('fin_placements', t => t.update({ concept: false, updated_at: new Date().toISOString() }).eq('id', p.id));
+    await reload('fin_placements', 'placements', 'id');
+    closeModal(); toast(`${p.id} bevestigd ✓ — factuurschema is actief`); rerender();
+  });
   $('#d_edit').onclick = () => { closeModal(); openPlacementWizard({ edit: p }); };
   $('#d_stop') && ($('#d_stop').onclick = () => { closeModal(); openStopModal(p); });
   $('#d_vervang') && ($('#d_vervang').onclick = async () => {
@@ -234,8 +248,11 @@ function openPlacementDetail(pid) {
   };
   $('#d_del').onclick = async () => {
     if (!confirm(`Plaatsing ${p.id} (${p.kandidaat}) én alle termijnen verwijderen?`)) return;
+    if (p.pipeline_candidate_id)   // anders maakt de app hem bij de volgende load opnieuw aan
+      await dbWrite('fin_dismissed_candidates', t => t.upsert({ candidate_id: p.pipeline_candidate_id }));
     await dbWrite('fin_placements', t => t.delete().eq('id', p.id));
-    await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_installments', 'installments', 'geplande_datum')]);
+    await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_installments', 'installments', 'geplande_datum'),
+      reload('fin_dismissed_candidates', 'dismissed', 'candidate_id')]);
     closeModal(); toast('Verwijderd'); rerender();
   };
 }
@@ -286,7 +303,7 @@ function renderPlaatsingen(root) {
       <td class="num">${eur(st.betaald)}</td>
       <td class="num">${st.open ? `<b style="color:var(--amber)">${eur(st.open)}</b>` : '—'}</td>
       <td class="num">${st.nog ? eur(st.nog) : '—'}</td>
-      <td>${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}</td></tr>`;
+      <td>${p.concept ? tag('✨ concept', 'amber') + ' ' : ''}${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}</td></tr>`;
   }).join('');
 
   root.innerHTML = `

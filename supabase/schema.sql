@@ -23,6 +23,7 @@ create table if not exists fin_placements (
   vervangen_door text,                      -- id van vervangende plaatsing
   pipeline_candidate_id text,               -- koppeling naar candidates.id (pijplijnbord)
   bron text not null default 'app',         -- 'excel' | 'pipeline' | 'app'
+  concept boolean not null default false,   -- automatisch aangemaakt vanaf het bord: fee nog bevestigen
   note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

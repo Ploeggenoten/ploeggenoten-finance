@@ -77,6 +77,11 @@ function acties() {
   const t = todayISO(), warnDgn = Number(S('waarschuwing_dgn', 21));
   const list = [];
   for (const p of D.placements) {
+    if (p.concept) {
+      // eerst fee bevestigen; factureer-acties wachten tot dan
+      list.push({ soort: 'concept', urg: 2, p, txt: `Nieuwe plaatsing ${p.id} automatisch aangemaakt — fee geschat op ${eur(p.fee_excl)}, bevestig of pas aan` });
+      continue;
+    }
     const st = placementStats(p);
     for (const i of st.ins) {
       if (i.status === 'te_factureren' && i.geplande_datum) {
@@ -129,6 +134,67 @@ function flexStats() {
 }
 function flexInMaand(mk) {
   return D.flex.filter(w => monthKey(w.week) === mk).reduce((s, w) => s + +w.bedrag, 0);
+}
+
+// ── automatische plaatsingen: contract getekend = plaatsing ────
+// De app maakt zelf een plaatsing (concept) aan zodra een kandidaat op het
+// bord "Contract getekend"/"Gestart" bereikt; Tjeerd bevestigt alleen de fee.
+const normKlant = s => (s || '').toLowerCase().replace(/[^a-z]/g, '').replace(/bv$/, '');
+
+function klantDefaults(bordKlant) {
+  const nk = normKlant(bordKlant);
+  const historie = D.placements.filter(p => !p.concept &&
+    (normKlant(p.klant).startsWith(nk.slice(0, 8)) || nk.startsWith(normKlant(p.klant).slice(0, 8))));
+  const modus = arr => arr.length ? arr.sort((a, b) =>
+    arr.filter(x => x === a).length - arr.filter(x => x === b).length).pop() : null;
+  const fees = historie.map(p => Number(p.fee_excl)).filter(Boolean);
+  return {
+    sheetKlant: historie[0]?.klant || bordKlant,
+    n: modus(historie.map(p => p.aantal_termijnen)) || 1,
+    tussen: modus(historie.map(p => p.maanden_tussen)) || 1,
+    betaal: modus(historie.map(p => p.betaaltermijn_dgn)) || Number(S('default_betaaltermijn', 14)),
+    gemFee: fees.length ? fees.reduce((a, b) => a + b, 0) / fees.length : null,
+  };
+}
+
+function volgendPlaatsingId() {
+  const nums = D.placements.map(x => parseInt((x.id || '').replace(/\D/g, ''))).filter(n => !isNaN(n));
+  return 'P' + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0');
+}
+
+async function autoCreatePlacements() {
+  const nieuw = inboxCandidates();
+  let gemaakt = 0;
+  for (const c of nieuw) {
+    const kd = klantDefaults(c.klant);
+    // fee: salaris uit bord-notitie > klant-gemiddelde > globaal gemiddelde
+    const m = (c.note || '').match(/\b([2-6]\d{3})\b/);
+    const fee = m ? Math.round(Number(m[1]) * 12 * Number(S('fee_pct', 0.22)))
+                  : Math.round(kd.gemFee || kpis().gemFee || 8500);
+    const start = c.start || c.geplaatst_op || todayISO();
+    const row = {
+      id: volgendPlaatsingId(), klant: kd.sheetKlant, kandidaat: c.naam, functie: c.functie || '',
+      fee_excl: fee, contract_datum: c.geplaatst_op || todayISO(), eerste_factuurdatum: start,
+      aantal_termijnen: kd.n, maanden_tussen: kd.tussen, betaaltermijn_dgn: kd.betaal,
+      garantie_mnd: Number(c.garantie_mnd || 0), pipeline_candidate_id: c.id,
+      bron: 'pipeline', concept: true,
+      note: m ? `Fee geschat: ${Math.round(Number(S('fee_pct', 0.22)) * 100)}% × 12 × €${m[1]} (bord-notitie)` : 'Fee geschat op klant/gemiddelde — bevestig!',
+    };
+    try {
+      await dbWrite('fin_placements', t => t.insert(row));
+      const schema = genSchema(kd.n > 1 ? 'nx' : '1x', fee, start, { n: kd.n, tussen: kd.tussen });
+      for (const r of schema)
+        await dbWrite('fin_installments', t => t.insert({
+          placement_id: row.id, termijn_nr: r.nr, bedrag_excl: r.bedrag, geplande_datum: r.datum, status: 'te_factureren',
+        }));
+      gemaakt++;
+    } catch (e) { /* volgende poging bij volgende load */ }
+  }
+  if (gemaakt) {
+    await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_installments', 'installments', 'geplande_datum')]);
+    toast(`${gemaakt} nieuwe plaatsing(en) automatisch aangemaakt vanaf het bord — bevestig de fee`);
+  }
+  return gemaakt;
 }
 
 // ── gewogen pijplijn-forecast ──────────────────────────────────

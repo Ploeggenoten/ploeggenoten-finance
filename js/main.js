@@ -41,6 +41,7 @@ async function startApp() {
   $('#viewRoot').innerHTML = `<div class="empty" style="padding:60px">⏳ Cijfers laden…</div>`;
   try {
     await loadAll();
+    await autoCreatePlacements();   // contract getekend op het bord → automatisch plaatsing (concept)
     $('#syncDot').classList.remove('err');
   } catch (e) {
     $('#syncDot').classList.add('err');
@@ -104,6 +105,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (document.visibilityState !== 'visible') return;
     if ($('#app').style.display === 'none' || !lastLoadTs) return;
     if (Date.now() - lastLoadTs < 5 * 60 * 1000) return;
-    try { await loadAll(); rerender(); } catch (e) { $('#syncDot').classList.add('err'); }
+    try { await loadAll(); await autoCreatePlacements(); rerender(); } catch (e) { $('#syncDot').classList.add('err'); }
   });
 });
