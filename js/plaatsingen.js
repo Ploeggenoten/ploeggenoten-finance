@@ -61,6 +61,16 @@ function genSchema(preset, fee, startISO, opts = {}) {
 // ── wizard: nieuwe plaatsing (evt. vanuit pijplijn-kandidaat) ──
 function openPlacementWizard({ candidate = null, edit = null } = {}) {
   const p = edit || {};
+  // fee-voorstel: maandsalaris uit de bord-notitie (bijv. "3500") × 12 × fee-%
+  let feeSuggestie = null, salarisHint = null;
+  if (candidate && !edit) {
+    const m = (candidate.note || '').match(/\b([2-6]\d{3})\b/);
+    if (m) {
+      salarisHint = Number(m[1]);
+      feeSuggestie = Math.round(salarisHint * 12 * Number(S('fee_pct', 0.22)));
+    }
+  }
+  const startSuggestie = candidate ? (candidate.start || candidate.geplaatst_op || todayISO()) : todayISO();
   const volgId = () => {
     const nums = D.placements.map(x => parseInt((x.id || '').replace(/\D/g, ''))).filter(n => !isNaN(n));
     return 'P' + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0');
@@ -75,7 +85,8 @@ function openPlacementWizard({ candidate = null, edit = null } = {}) {
         <datalist id="klantList">${klanten.map(k => `<option value="${esc(k)}">`).join('')}</datalist></div>
       <div><label>Kandidaat</label><input id="w_kand" value="${esc(p.kandidaat || candidate?.naam || '')}"></div>
       <div><label>Functie</label><input id="w_functie" value="${esc(p.functie || candidate?.functie || '')}"></div>
-      <div><label>Totale fee excl. btw</label><input id="w_fee" type="number" step="0.01" value="${p.fee_excl ?? ''}"></div>
+      <div><label>Totale fee excl. btw</label><input id="w_fee" type="number" step="0.01" value="${p.fee_excl ?? feeSuggestie ?? ''}">
+        ${feeSuggestie ? `<span class="muted" style="font-size:11px">voorstel: ${Math.round(Number(S('fee_pct', 0.22)) * 100)}% × 12 × €${salarisHint} (uit bord-notitie)</span>` : ''}</div>
       <div><label>Contract getekend</label><input id="w_contract" type="date" value="${esc(p.contract_datum || candidate?.geplaatst_op || todayISO())}"></div>
       <div><label>Betaaltermijn (dgn)</label><input id="w_betaal" type="number" value="${p.betaaltermijn_dgn ?? S('default_betaaltermijn', 14)}"></div>
       <div><label>Garantie (mnd)</label><input id="w_gar" type="number" value="${p.garantie_mnd ?? candidate?.garantie_mnd ?? 0}"></div>
@@ -89,7 +100,8 @@ function openPlacementWizard({ candidate = null, edit = null } = {}) {
         <option value="nx">N termijnen, elke X mnd</option>
         <option value="5050">50% bij tekenen · 50% na X mnd</option>
       </select></div>
-      <div><label>1e factuurdatum</label><input id="w_start" type="date" value="${todayISO()}"></div>
+      <div><label>1e factuurdatum</label><input id="w_start" type="date" value="${esc(startSuggestie)}">
+        ${candidate?.start ? `<span class="muted" style="font-size:11px">= startdatum van het bord</span>` : ''}</div>
       <div id="w_nxOpts" style="display:none"><label>Aantal × om de (mnd)</label>
         <div class="row"><input id="w_n" type="number" value="7" style="width:60px"><input id="w_tussen" type="number" value="1" style="width:60px"></div></div>
       <div id="w_5050Opts" style="display:none"><label>2e helft na (mnd)</label><input id="w_naMnd" type="number" value="3"></div>

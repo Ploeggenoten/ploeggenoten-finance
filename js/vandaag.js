@@ -8,6 +8,7 @@ function renderVandaag(root) {
   const proj = projectie(12);
 
   const fx = flexStats();
+  const tgt = targetInfo();
   const kpiHtml = `
   <div class="grid cols-4">
     <div class="kpi"><div class="lbl">Banksaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div>
@@ -15,9 +16,11 @@ function renderVandaag(root) {
       <div class="sub">vrij besteedbaar na potjes: <b>${vrij == null ? '—' : eur(vrij)}</b></div></div>
     <div class="kpi ${k.openstaand > 0 ? 'warn' : ''}"><div class="lbl">Openstaand (gefact., niet betaald)</div>
       <div class="val">${eur(k.openstaand)}</div><div class="sub">excl. btw</div></div>
-    <div class="kpi"><div class="lbl">Gefactureerd deze maand</div>
-      <div class="val">${eur(k.omzetDezeMaand)}</div>
-      <div class="sub">${S('target_omzet_pm') ? 'target ' + eur(S('target_omzet_pm')) : 'nog te factureren: ' + eur(k.nogTeFactureren)}</div></div>
+    <div class="kpi ${tgt.aantalTarget && tgt.plaatsingen >= tgt.aantalTarget ? 'good' : ''}"><div class="lbl">Deze maand${tgt.aantalTarget ? ' · target bord' : ''}</div>
+      <div class="val">${tgt.aantalTarget ? `${tgt.plaatsingen} / ${tgt.aantalTarget}` : eur(k.omzetDezeMaand)}</div>
+      <div class="sub">${tgt.aantalTarget
+        ? `plaatsingen · gefactureerd ${eur(k.omzetDezeMaand)}${tgt.omzetTarget ? ' van ~' + eur(tgt.omzetTarget) : ''}`
+        : 'gefactureerd; nog te factureren: ' + eur(k.nogTeFactureren)}</div></div>
     <div class="kpi"><div class="lbl">Flex (run-rate p/m)</div>
       <div class="val">${fx.maandRunRate ? eur(fx.maandRunRate) : '—'}</div>
       <div class="sub">${fx.laatste ? 'laatste week ' + eur(fx.laatste.bedrag) : 'nog geen weken ingevoerd'}</div></div>
@@ -26,7 +29,7 @@ function renderVandaag(root) {
   const actieHtml = lijst.length ? lijst.map((a, idx) => {
     const wie = a.p ? `${esc(a.p.kandidaat)} · ${esc(a.p.klant)}` : (a.c ? `${esc(a.c.naam)} · ${esc(a.c.klant || '')}` : 'Algemeen');
     const bedrag = a.i ? ` · ${eur(a.i.bedrag_excl)} excl. btw` : '';
-    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦' }[a.soort] || '•';
+    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢' }[a.soort] || '•';
     let btn = '';
     if (a.soort === 'factureren') btn = `<button class="btn small primary" data-act="factureer" data-idx="${idx}">Gefactureerd ✓</button>`;
     if (a.soort === 'te_laat') btn = `<button class="btn small primary" data-act="betaald" data-idx="${idx}">Betaald ✓</button>`;
@@ -34,6 +37,7 @@ function renderVandaag(root) {
     if (a.soort === 'stop') btn = `<button class="btn small danger" data-act="stopverwerk" data-idx="${idx}">Termijnen vervallen</button>`;
     if (a.soort === 'stop_signaal') btn = `<button class="btn small danger" data-act="stopsignaal" data-idx="${idx}">Verwerk stop</button>`;
     if (a.soort === 'saldo') btn = `<button class="btn small primary" data-act="saldo">Saldo bijwerken</button>`;
+    if (a.soort === 'flex') btn = `<button class="btn small primary" data-act="flexin">Invullen →</button>`;
     if (a.soort === 'vervanging') btn = `<button class="btn small" data-act="openpl" data-pid="${esc(a.p.id)}">Bekijk</button>`;
     return `<div class="actie ${a.urg === 2 ? 'urgent' : 'warn'}">
       <div class="ico">${ico}</div>
@@ -85,6 +89,7 @@ function renderVandaag(root) {
     if (b.dataset.act === 'stopverwerk' && a) await verwerkStop(a.p);
     if (b.dataset.act === 'stopsignaal' && a) return openStopModal(a.p, a.c.gestopt_op);
     if (b.dataset.act === 'saldo') return openSaldoModal();
+    if (b.dataset.act === 'flexin') return switchView('flex');
     if (b.dataset.act === 'openpl') return openPlacementDetail(b.dataset.pid);
   }, { once: false });
 }

@@ -103,6 +103,14 @@ function acties() {
   const saldo = D.saldi[0];
   if (!saldo || daysBetween(saldo.datum, t) > 14)
     list.push({ soort: 'saldo', urg: 1, txt: saldo ? `Banksaldo ${daysBetween(saldo.datum, t)} dgn oud — werk bij` : 'Vul je banksaldo in' });
+  // flex-bewaking: vorige week (ma t/m zo voorbij) nog niet ingevuld?
+  if (D.flex.length) {
+    const dag = (new Date(t + 'T12:00:00').getDay() + 6) % 7;      // ma=0
+    const maDezeWeek = addDays(t, -dag);
+    const maVorigeWeek = addDays(maDezeWeek, -7);
+    if (!D.flex.some(w => w.week === maVorigeWeek))
+      list.push({ soort: 'flex', urg: 1, txt: `Flex-week van ${fmtD(maVorigeWeek)} nog niet ingevuld (Pronkert)` });
+  }
   return list.sort((a, b) => b.urg - a.urg);
 }
 
@@ -121,6 +129,88 @@ function flexStats() {
 }
 function flexInMaand(mk) {
   return D.flex.filter(w => monthKey(w.week) === mk).reduce((s, w) => s + +w.bedrag, 0);
+}
+
+// ── gewogen pijplijn-forecast ──────────────────────────────────
+// Kans per bordfase dat het een plaatsing wordt (instelbaar via setting 'fase_kansen')
+const FASE_KANSEN_DEFAULT = {
+  'Voorgesteld': .10, 'Voorselectie': .10, 'O&O sessie': .25,
+  'Eerste gesprek': .20, 'Tweede gesprek': .35, 'Meeloopdag': .50,
+  'Contract ondertekenen': .80,
+};
+// verwachte weken tot plaatsing per fase (voor timing van de cash)
+const FASE_LEAD_WKN = {
+  'Voorgesteld': 8, 'Voorselectie': 8, 'O&O sessie': 6,
+  'Eerste gesprek': 6, 'Tweede gesprek': 5, 'Meeloopdag': 4,
+  'Contract ondertekenen': 2,
+};
+
+function pipelineForecast() {
+  const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, S('fase_kansen', {}) || {});
+  const fee = kpis().gemFee || 8500;
+  const t = todayISO();
+  const linked = new Set(D.placements.map(p => p.pipeline_candidate_id).filter(Boolean));
+  const rows = D.candidates.filter(c =>
+    kansen[c.fase] > 0 && (c.type || '') !== 'Detachering' &&
+    !(c.vervangt || '') && !linked.has(c.id))
+    .map(c => {
+      const kans = kansen[c.fase];
+      // plaatsing verwacht op bord-startdatum, anders fase-afhankelijke doorlooptijd
+      const plaatsing = (c.start && c.start > t) ? c.start : addDays(t, (FASE_LEAD_WKN[c.fase] || 6) * 7);
+      const cash = monthKey(addDays(plaatsing, 30));   // factuur + betaaltermijn ≈ 1 mnd later
+      return { c, kans, fee, gewogen: fee * kans, plaatsing, cashMaand: cash };
+    })
+    .sort((a, b) => b.kans - a.kans);
+  const totaal = rows.reduce((s, r) => s + r.gewogen, 0);
+  const perMaand = {};
+  for (const r of rows) perMaand[r.cashMaand] = (perMaand[r.cashMaand] || 0) + r.gewogen;
+  return { rows, totaal, perMaand };
+}
+
+// ── targets van het pijplijnbord ───────────────────────────────
+function targetInfo() {
+  const mk = todayISO().slice(0, 7);                       // '2026-07'
+  const row = D.targets.find(x => x.maand === mk);
+  const aantalTarget = row ? Number(row.aantal) : null;
+  const plaatsingen = D.placements.filter(p => (p.contract_datum || '').slice(0, 7) === mk).length;
+  const gemFee = kpis().gemFee || 8500;
+  const omzetTarget = S('target_omzet_pm') || (aantalTarget ? aantalTarget * gemFee : null);
+  return { aantalTarget, plaatsingen, omzetTarget, maand: mk };
+}
+
+// ── wervingskanalen & team (via gekoppelde bord-kandidaten) ────
+function kanaalStats() {
+  const per = {};
+  for (const p of D.placements) {
+    const c = D.candidates.find(x => x.id === p.pipeline_candidate_id);
+    const bron = (c?.bron || 'Onbekend').trim() || 'Onbekend';
+    const st = placementStats(p);
+    per[bron] = per[bron] || { n: 0, omzet: 0 };
+    per[bron].n++;
+    per[bron].omzet += Number(p.fee_excl || 0) - st.vervallen;
+  }
+  return Object.entries(per).map(([bron, v]) => ({ bron, ...v }))
+    .sort((a, b) => b.omzet - a.omzet);
+}
+
+function teamStats() {
+  const per = {};
+  let ttfSom = 0, ttfN = 0;
+  for (const p of D.placements) {
+    const c = D.candidates.find(x => x.id === p.pipeline_candidate_id);
+    if (!c) continue;
+    const rec = (c.rec || 'Samen').trim() || 'Samen';
+    per[rec] = per[rec] || { n: 0, omzet: 0 };
+    per[rec].n++;
+    per[rec].omzet += Number(p.fee_excl || 0) - placementStats(p).vervallen;
+    if (c.since && c.geplaatst_op && c.geplaatst_op > c.since) {
+      ttfSom += daysBetween(c.since, c.geplaatst_op); ttfN++;
+    }
+  }
+  return {
+    recruiters: Object.entries(per).map(([rec, v]) => ({ rec, ...v })).sort((a, b) => b.omzet - a.omzet),
+    timeToFill: ttfN ? Math.round(ttfSom / ttfN) : null,
+  };
 }
 
 // ── KPI's & risico's ───────────────────────────────────────────
@@ -210,6 +300,7 @@ function potjes() {
 // scenario = { omzetPm, omzetDipPct, extraHirePm, extraHireVanaf, aflossenAan }
 function projectie(maanden = 12, scenario = {}) {
   const sc = Object.assign({
+    bron: 'pijplijn',                                 // 'pijplijn' = gewogen forecast van het bord; 'vast' = vlak bedrag
     omzetPm: Number(S('scenario_omzet_pm', 25000)),
     omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 1, aflossenAan: true,
     flexFactor: 1,                                    // 1 = flex blijft op run-rate; 2 = verdubbelt; 0 = valt weg
@@ -235,8 +326,19 @@ function projectie(maanden = 12, scenario = {}) {
     }
   }
   // 2. scenario: nieuwe W&S-omzet (facturen volgen ~1 mnd later, incl. btw)
-  const omzet = sc.omzetPm * (1 - sc.omzetDipPct);
-  keys.forEach((k, i) => { if (i >= 1) put(k, 'inScenario', omzet * (1 + btwPct)); });
+  if (sc.bron === 'pijplijn' && D.candidates.length) {
+    // gewogen forecast uit het bord: kans × fee per kandidaat, in de verwachte cash-maand.
+    // Ná de bord-horizon (kandidaten kijken ~2 mnd vooruit) valt terug op het vlakke scenario.
+    const pf = pipelineForecast();
+    const horizon = Object.keys(pf.perMaand).sort().pop() || m0;
+    keys.forEach((k, i) => {
+      if (pf.perMaand[k]) put(k, 'inScenario', pf.perMaand[k] * (1 - sc.omzetDipPct) * (1 + btwPct));
+      else if (k > horizon && i >= 1) put(k, 'inScenario', sc.omzetPm * (1 - sc.omzetDipPct) * (1 + btwPct));
+    });
+  } else {
+    const omzet = sc.omzetPm * (1 - sc.omzetDipPct);
+    keys.forEach((k, i) => { if (i >= 1) put(k, 'inScenario', omzet * (1 + btwPct)); });
+  }
   // 2b. flex: doorlopende weekmarge (run-rate laatste 4 weken × factor, incl. btw)
   const flexPm = flexStats().maandRunRate * sc.flexFactor;
   keys.forEach(k => put(k, 'inFlex', flexPm * (1 + btwPct)));

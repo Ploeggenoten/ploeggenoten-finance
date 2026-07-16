@@ -88,6 +88,30 @@ function adviesEngine() {
       `Zonder flex-inkomsten begint elke maand op nul: W&S-fees zijn eenmalig. Dat maakt je kwetsbaar voor een stille maand.`,
       `Bouw de flexpoot via Pronkert uit — elke flexkracht is wekelijkse marge die je vaste lasten draagt. Vul de weekbedragen in op het Flex-tabblad zodra ze binnenkomen.`);
 
+  // target van het bord: hoe sta je ervoor deze maand?
+  const tgt = targetInfo();
+  if (tgt.aantalTarget) {
+    const gap = tgt.aantalTarget - tgt.plaatsingen;
+    const laatsteDag = addMonths(monthKey(t), 1);
+    const dagenOver = daysBetween(t, laatsteDag);
+    if (gap > 0 && dagenOver <= 12) add('gevaar', 2, 'Maandtarget onder druk', `${tgt.plaatsingen}/${tgt.aantalTarget} · nog ${dagenOver} dgn`,
+      `Het bord-target is ${tgt.aantalTarget} plaatsingen deze maand; je staat op ${tgt.plaatsingen}. Het gat van ${gap} plaatsing(en) ≈ ${eur(gap * gemFee)} omzet.`,
+      `Kijk in de gewogen pijplijn (Cashflow) wie het dichtst bij zit en geef die deals voorrang.`);
+    else if (gap <= 0) add('sterkte', 1, 'Maandtarget gehaald', `${tgt.plaatsingen}/${tgt.aantalTarget}`,
+      `Target van het bord is binnen — alles erbij is bonus.`, null);
+  }
+
+  // kanaalafhankelijkheid (bron van het bord)
+  const kanalen = kanaalStats();
+  const kTot = kanalen.reduce((s, k2) => s + k2.omzet, 0);
+  if (kanalen.length && kTot > 0) {
+    const top = kanalen[0];
+    if (top.bron !== 'Onbekend' && top.omzet / kTot > .6)
+      add('gevaar', 1, 'Werving leunt zwaar op één kanaal', `${esc(top.bron)} · ${pct(top.omzet / kTot)}`,
+        `${top.bron} is goed voor ${pct(top.omzet / kTot)} van je plaatsingsomzet. Als dat kanaal duurder wordt of dichtgaat (algoritme, beleid), raakt dat direct je dealflow.`,
+        `Houd een tweede kanaal warm (referrals zijn gratis: vraag elke geplaatste kandidaat en tevreden klant om één naam).`);
+  }
+
   // ── KANSEN ───────────────────────────────────────────────────
   if (buffer > 6) {
     const overschot = vrij - vaste * 6;
@@ -179,6 +203,20 @@ function adviseurCijfers() {
 function renderAdvies(root) {
   const items = adviesEngine();
   const cijfers = adviseurCijfers();
+  const kanalen = kanaalStats();
+  const kTot = kanalen.reduce((s, k) => s + k.omzet, 0) || 1;
+  const team = teamStats();
+  const kanaalHtml = kanalen.length ? `<div class="table-wrap"><table>
+    <tr><th>Kanaal</th><th class="num">Plaatsingen</th><th class="num">Omzet (na uitval)</th><th class="num">Aandeel</th></tr>
+    ${kanalen.map(k => `<tr><td>${esc(k.bron)}</td><td class="num">${k.n}</td><td class="num">${eur(k.omzet)}</td><td class="num">${pct(k.omzet / kTot)}</td></tr>`).join('')}
+    </table></div><p class="muted mt">Bron per kandidaat komt van het pijplijnbord. Leg dit naast je advertentie-uitgaven (Kosten → Marketing & verkoop) om te zien welk kanaal opschalen verdient.</p>`
+    : '<div class="empty">Nog geen bronnen gekoppeld.</div>';
+  const teamHtml = `
+    ${team.recruiters.length ? `<div class="table-wrap"><table>
+    <tr><th>Recruiter</th><th class="num">Plaatsingen</th><th class="num">Omzet (na uitval)</th></tr>
+    ${team.recruiters.map(r => `<tr><td>${esc(r.rec)}</td><td class="num">${r.n}</td><td class="num">${eur(r.omzet)}</td></tr>`).join('')}
+    </table></div>` : '<div class="empty">Nog geen recruiters gekoppeld.</div>'}
+    ${team.timeToFill != null ? `<div class="pot mt"><span>Gem. doorlooptijd bord → plaatsing</span><b>${team.timeToFill} dgn</b></div>` : ''}`;
   const iconOf = { gevaar: '🔴', kans: '🟡', sterkte: '🟢' };
   const kaart = it => `<div class="actie ${it.urg === 3 ? 'urgent' : it.urg === 2 ? 'warn' : ''}" style="align-items:flex-start">
     <div class="ico">${iconOf[it.cat]}</div>
@@ -201,5 +239,9 @@ function renderAdvies(root) {
       </table></div></div>
     ${sectie('gevaar', '🔴 Gevaren')}
     ${sectie('kans', '🟡 Kansen')}
-    ${sectie('sterkte', '🟢 Sterktes')}`;
+    ${sectie('sterkte', '🟢 Sterktes')}
+    <div class="grid cols-2">
+      <div class="panel"><h2>📣 Wervingskanalen</h2>${kanaalHtml}</div>
+      <div class="panel"><h2>👥 Team & snelheid</h2>${teamHtml}</div>
+    </div>`;
 }

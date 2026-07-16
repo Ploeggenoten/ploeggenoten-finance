@@ -128,8 +128,10 @@ function cfTabelHtml(sc) {
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const sc = scenarioState || (scenarioState = {
+    bron: 'pijplijn',
     omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
   });
+  const pf = pipelineForecast();
   const proj = projectie(12, sc);
   const lening = D.loans[0];
   const afgelost = D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0);
@@ -146,7 +148,10 @@ function renderCashflow(root) {
 
     <div class="grid cols-2 mb">
       <div class="panel"><h2>🎛 Scenario-knoppen</h2>
-        <div class="slider-row"><span>Nieuwe omzet p/m</span>
+        <div class="slider-row"><span>Nieuwe omzet uit</span>
+          <select id="sc_bron"><option value="pijplijn" ${sc.bron === 'pijplijn' ? 'selected' : ''}>Gewogen pijplijn (bord)</option>
+          <option value="vast" ${sc.bron === 'vast' ? 'selected' : ''}>Vast bedrag p/m</option></select><span></span></div>
+        <div class="slider-row"><span>${'Vast bedrag / ná bord-horizon'}</span>
           <input type="range" id="sc_omzet" min="0" max="60000" step="1000" value="${sc.omzetPm}"><b id="scv_omzet">${eur(sc.omzetPm)}</b></div>
         <div class="slider-row"><span>Omzet valt terug met</span>
           <input type="range" id="sc_dip" min="0" max="100" step="5" value="${sc.omzetDipPct * 100}"><b id="scv_dip">${Math.round(sc.omzetDipPct * 100)}%</b></div>
@@ -172,6 +177,16 @@ function renderCashflow(root) {
       </div>
     </div>
 
+    <div class="panel mb"><div class="spread mb"><h2>🔮 Gewogen pijplijn-forecast <span class="muted">— live van het bord</span></h2>
+      <span class="muted">totaal gewogen: <b>${eur(pf.totaal)}</b> excl. btw</span></div>
+      ${pf.rows.length ? `<div class="table-wrap"><table>
+      <tr><th>Kandidaat</th><th>Klant</th><th>Fase</th><th class="num">Kans</th><th class="num">Fee (gem.)</th><th class="num">Gewogen</th><th>Cash verwacht</th></tr>
+      ${pf.rows.map(r => `<tr><td>${esc(r.c.naam)}</td><td>${esc(r.c.klant || '')}</td><td>${tag(r.c.fase, r.kans >= .5 ? 'green' : r.kans >= .25 ? 'amber' : 'gray')}</td>
+        <td class="num">${Math.round(r.kans * 100)}%</td><td class="num">${eur(r.fee)}</td><td class="num"><b>${eur(r.gewogen)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
+      </table></div>
+      <p class="muted mt">Kans per fase (aanpasbaar op verzoek): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Fee = je gemiddelde. Bij "Gewogen pijplijn" rekent de projectie hiermee; na de bord-horizon geldt het vaste bedrag.</p>`
+      : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
+
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>`;
 
   // schuiven: alleen de dynamische delen verversen, niet de schuiven zelf
@@ -183,6 +198,7 @@ function renderCashflow(root) {
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
     $('#scv_hire').textContent = eur(sc.extraHirePm);
   };
+  $('#sc_bron').onchange = e => { sc.bron = e.target.value; upd(); };
   $('#sc_omzet').oninput = e => { sc.omzetPm = +e.target.value; upd(); };
   $('#sc_dip').oninput = e => { sc.omzetDipPct = +e.target.value / 100; upd(); };
   $('#sc_flex').oninput = e => { sc.flexFactor = +e.target.value / 100; upd(); };

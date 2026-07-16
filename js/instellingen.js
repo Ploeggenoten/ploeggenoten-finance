@@ -5,6 +5,7 @@ function renderInstellingen(root) {
     { key: 'btw_pct', lbl: 'Btw-percentage', type: 'pct' },
     { key: 'vpb_pct', lbl: 'Vpb-reservering (% van winst)', type: 'pct' },
     { key: 'voorbelasting_pm', lbl: 'Geschatte voorbelasting p/m (btw-aftrek op kosten)', type: 'eur' },
+    { key: 'fee_pct', lbl: 'Fee-voorstel wizard (% van jaarsalaris)', type: 'pct' },
     { key: 'mgmt_fee_pm', lbl: 'Management fee p/m (kosten)', type: 'eur' },
     { key: 'mgmt_uitkering_pm', lbl: 'Werkelijke uitkering TVE p/m (cash)', type: 'eur' },
     { key: 'default_betaaltermijn', lbl: 'Standaard betaaltermijn (dagen)', type: 'int' },

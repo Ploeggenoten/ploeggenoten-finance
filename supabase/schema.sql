@@ -151,6 +151,7 @@ insert into fin_settings (key, value) values
   ('scenario_omzet_pm',    '25000'),  -- nieuwe W&S-omzet per maand (scenario)
   ('target_omzet_pm',      'null'),   -- nog samen te bepalen
   ('voorbelasting_pm',     '2800'),   -- btw-aftrek op kosten p/m (Yuki YTD: €18.719 / 6,5 mnd)
+  ('fee_pct',              '0.22'),   -- fee-voorstel in wizard: % van jaarsalaris
   ('mgmt_fee_pm',          '4300'),   -- management fee (kosten, drukt op winst)
   ('mgmt_uitkering_pm',    '6000'),   -- werkelijke maandelijkse uitkering aan TVE (cash); verschil bouwt RC af
   ('yuki_winst_ytd',       '85238.87'),   -- winst vóór belastingen per rapportdatum (Vpb-anker)
