@@ -49,12 +49,16 @@ function stopImpact(p) {
 function inboxCandidates() {
   const linked = new Set(D.placements.map(p => p.pipeline_candidate_id).filter(Boolean));
   const dismissed = new Set(D.dismissed.map(d => d.candidate_id));
-  const byNameClient = new Set(D.placements.map(p =>
-    (p.kandidaat + '|' + p.klant).toLowerCase()));
+  // naam-match als vangnet: klantnamen verschillen tussen bord en finance
+  // ("Henri" vs "Henri B.V"), dus we matchen op kandidaatnaam alleen
+  const byName = new Set(D.placements.map(p => (p.kandidaat || '').trim().toLowerCase()).filter(Boolean));
   return D.candidates.filter(c =>
     (PLACED_FASES.includes(c.fase) || c.geplaatst_op) &&
+    c.fase !== 'Afgevallen' &&
+    (c.type || '') !== 'Detachering' &&          // flex loopt via Pronkert, niet via W&S-facturatie
+    !(c.vervangt || '') &&                        // garantievervangers zijn geen nieuwe fee
     !linked.has(c.id) && !dismissed.has(c.id) &&
-    !byNameClient.has(((c.naam || '') + '|' + (c.klant || '')).toLowerCase()));
+    !byName.has((c.naam || '').trim().toLowerCase()));
 }
 
 // gestopt op het bord, maar nog niet in finance verwerkt
