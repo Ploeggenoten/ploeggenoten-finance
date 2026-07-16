@@ -94,22 +94,69 @@ function cfDynHtml(sc) {
   const proj = projectie(12, sc);
   const saldo = D.saldi[0];
   const pot = potjes();
+  const ti = targetInfo();
+  const bp = ti.board;
+  const tgt = ti.aantalTarget;
+  const gemFee = proj.gemFee;
+  const behoud = proj.blijfkans;
+  const pf = pipelineForecast();
+  const m0 = monthKey(todayISO());
+
+  // ── drie vooruitblik-scenario's (zelfde blijfkans/aflossing, ander tempo) ──
+  const base = { aflossenAan: sc.aflossenAan, blijfkans: sc.blijfkans, flexFactor: sc.flexFactor };
+  const down = Math.max(0, tgt - 2);
+  const sTarget   = projectie(12, { ...base, bron: 'target',   plaatsingenPm: tgt });
+  const sVerwacht = projectie(12, { ...base, bron: 'pijplijn', plaatsingenPm: tgt });
+  const sDown     = projectie(12, { ...base, bron: 'target',   plaatsingenPm: down });
+  const omzetPm = n => n * gemFee * behoud;
+
+  const scen = (icon, titel, sub, p, accent) => `
+    <div class="kpi" style="border-top:3px solid ${accent}">
+      <div class="lbl">${icon} ${titel}</div>
+      <div class="val" style="color:${p.eind < 0 ? 'var(--red)' : 'inherit'}">${eur(p.eind)}</div>
+      <div class="sub">${sub}<br>laagste ${eur(p.laagste.saldo)} · ${esc(p.laagste.label || '')}</div>
+    </div>`;
+
+  const verschil = sTarget.eind - sDown.eind;
+  const headline = `
+   <div class="grid cols-3 mb">
+     ${scen('🎯', 'Op target', `${tgt}/mnd → ${eur(omzetPm(tgt))} omzet p/m`, sTarget, 'var(--green)')}
+     ${scen('📊', 'Verwacht · pijplijn', `~${pf.verwachtAantal.toFixed(1)} plaatsingen gewogen in beeld`, sVerwacht, 'var(--accent)')}
+     ${scen('⚠️', 'Tegenvaller', `${down}/mnd → ${eur(omzetPm(down))} omzet p/m`, sDown, 'var(--amber)')}
+   </div>
+   <div class="panel mb" style="background:var(--surface2, #f7f7f4);border-left:4px solid var(--amber)">
+     <b>Wat sturen op plaatsingen oplevert.</b> Elke plaatsing méér per maand ≈ <b>${eur(gemFee)}</b> omzet
+     (${eur(omzetPm(1))} na blijfkans), die ~6–8 weken later in je cash landt.
+     Het verschil tussen <b>${tgt}/mnd</b> en <b>${down}/mnd</b> is over 12 mnd
+     <b style="color:${verschil >= 0 ? 'var(--green)' : 'var(--red)'}">${eur(verschil)}</b> eindsaldo.
+   </div>`;
+
+  // ── deze maand: bord-correspondentie + concrete impact ──
+  const left = Math.max(0, tgt - bp.netto);
+  const cashMaand2 = fmtMaand(addMonths(m0, 2));
+  const kpiRow = `
+   <div class="grid cols-4 mb">
+     <div class="kpi ${bp.netto >= tgt ? 'good' : ''}"><div class="lbl">Deze maand · target bord</div>
+       <div class="val">${bp.netto} / ${tgt}</div>
+       <div class="sub">${bp.ws} W&amp;S · ${bp.flex} flex${bp.onb ? ` · ${bp.onb} ?` : ''}${bp.stopM ? ` · −${bp.stopM} gestopt` : ''}</div></div>
+     <div class="kpi"><div class="lbl">Startsaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div><div class="val">${saldo ? eur(saldo.saldo) : '—'}</div>
+       <div class="sub">vrij na potjes ${saldo ? eur(saldo.saldo - pot.btwPot - pot.vpbPot) : '—'}</div></div>
+     <div class="kpi ${proj.laagste.saldo < 0 ? 'bad' : proj.laagste.saldo < 10000 ? 'warn' : 'good'}">
+       <div class="lbl">Laagste punt (dit scenario)</div><div class="val">${eur(proj.laagste.saldo)}</div><div class="sub">${esc(proj.laagste.label || '')}</div></div>
+     <div class="kpi"><div class="lbl">Runway zónder nieuwe W&S</div><div class="val">${proj.runway >= 12 ? '12+' : proj.runway} mnd</div><div class="sub">factuurschema + flex − kosten</div></div>
+   </div>
+   <div class="panel mb">${left > 0
+      ? `<div class="pot"><span>📍 Nog <b>${left}</b> plaatsing${left === 1 ? '' : 'en'} te gaan deze maand. Haal je die niet, dan mis je ~<b>${eur(left * gemFee)}</b> omzet — zichtbaar in je cash rond <b>${cashMaand2}</b>.</span></div>`
+      : `<div class="pot"><span>✓ Target deze maand gehaald: <b>${bp.netto}/${tgt}</b> netto plaatsingen (gelijk aan het bord).</span></div>`}
+      <div class="pot"><span>🔄 Blijfkans <b>${Math.round(behoud * 100)}%</b> (historisch: ${D.placements.filter(p => p.gestopt_op).length} van ${D.placements.length} plaatsingen gestopt). Van elke <b>${tgt}</b> plaatsingen reken ik op ~<b>${(tgt * behoud).toFixed(1)}</b> die blijven.</span></div></div>`;
 
   const chart = lineChart(proj.rows.map(r => r.label), [
-    { label: 'Banksaldo (scenario)', color: 'var(--accent)', values: proj.rows.map(r => r.saldo) },
-    { label: 'Vrij besteedbaar (na potjes)', color: 'var(--green)', values: proj.rows.map(r => r.saldo - pot.btwPot - pot.vpbPot) },
+    { label: 'Banksaldo (huidig scenario)', color: 'var(--accent)', values: proj.rows.map(r => r.saldo) },
+    { label: 'Op target', color: 'var(--green)', values: sTarget.rows.map(r => r.saldo) },
+    { label: 'Tegenvaller', color: 'var(--amber)', values: sDown.rows.map(r => r.saldo) },
   ], { height: 260 });
 
-  return `
-    <div class="grid cols-4 mb">
-      <div class="kpi"><div class="lbl">Startsaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div><div class="val">${saldo ? eur(saldo.saldo) : '—'}</div></div>
-      <div class="kpi ${proj.laagste.saldo < 0 ? 'bad' : proj.laagste.saldo < 10000 ? 'warn' : 'good'}">
-        <div class="lbl">Laagste punt (12 mnd)</div><div class="val">${eur(proj.laagste.saldo)}</div><div class="sub">${esc(proj.laagste.label || '')}</div></div>
-      <div class="kpi"><div class="lbl">Runway zónder nieuwe W&S</div><div class="val">${proj.runway >= 12 ? '12+' : proj.runway} mnd</div><div class="sub">factuurschema + flex − kosten</div></div>
-      <div class="kpi"><div class="lbl">Eindsaldo over 12 mnd</div><div class="val">${eur(proj.rows[proj.rows.length - 1].saldo)}</div><div class="sub">in dit scenario</div></div>
-    </div>
-
-    <div class="panel mb"><h2>📈 Saldo-projectie</h2>${chart}</div>`;
+  return headline + kpiRow + `<div class="panel mb"><h2>📈 Saldo-projectie — huidig scenario vs. target vs. tegenvaller</h2>${chart}</div>`;
 }
 
 function cfTabelHtml(sc) {
@@ -127,15 +174,24 @@ function cfTabelHtml(sc) {
 
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
+  const tgt0 = targetInfo().aantalTarget;
+  const behoud0 = 1 - (kpis().stopPct || 0);
   const sc = scenarioState || (scenarioState = {
-    bron: 'pijplijn',
+    bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0,
     omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
   });
+  if (sc.plaatsingenPm == null) sc.plaatsingenPm = tgt0;
+  if (sc.blijfkans == null) sc.blijfkans = behoud0;
   const pf = pipelineForecast();
   const proj = projectie(12, sc);
   const lening = D.loans[0];
   const afgelost = D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0);
   const maandOpts = proj.rows.map((r, i) => `<option value="${i}" ${i === sc.extraHireVanaf ? 'selected' : ''}>${esc(r.label)}</option>`).join('');
+
+  // pijplijn per plaatsmaand → aantallen (verwacht = som van kansen)
+  const plMaanden = Object.keys(pf.perMaandPlaatsMaand).sort();
+  const plChips = plMaanden.map(mk => `<span class="tag gray">${fmtMaand(mk)}: <b>${pf.perMaandPlaatsMaand[mk].toFixed(1)}</b></span>`).join(' ');
+  const behoefte = sc.plaatsingenPm;   // per maand nodig voor target
 
   root.innerHTML = `
     <div class="spread mb"><h1>Cashflow & toekomst</h1>
@@ -147,13 +203,18 @@ function renderCashflow(root) {
     <div id="cfDyn">${cfDynHtml(sc)}</div>
 
     <div class="grid cols-2 mb">
-      <div class="panel"><h2>🎛 Scenario-knoppen</h2>
-        <div class="slider-row"><span>Nieuwe omzet uit</span>
-          <select id="sc_bron"><option value="pijplijn" ${sc.bron === 'pijplijn' ? 'selected' : ''}>Gewogen pijplijn (bord)</option>
-          <option value="vast" ${sc.bron === 'vast' ? 'selected' : ''}>Vast bedrag p/m</option></select><span></span></div>
-        <div class="slider-row"><span>${'Vast bedrag / ná bord-horizon'}</span>
+      <div class="panel"><h2>🎛 Wat-als knoppen <span class="muted">— denk in plaatsingen</span></h2>
+        <div class="slider-row"><span>Nieuwe omzet baseer op</span>
+          <select id="sc_bron"><option value="pijplijn" ${sc.bron === 'pijplijn' ? 'selected' : ''}>Gewogen pijplijn → daarna target-tempo</option>
+          <option value="target" ${sc.bron === 'target' ? 'selected' : ''}>Vast tempo: X plaatsingen/mnd</option>
+          <option value="vast" ${sc.bron === 'vast' ? 'selected' : ''}>Vast €-bedrag p/m</option></select><span></span></div>
+        <div class="slider-row"><span>Tempo (plaatsingen p/m)</span>
+          <input type="range" id="sc_pl" min="0" max="15" step="1" value="${sc.plaatsingenPm}"><b id="scv_pl">${sc.plaatsingenPm} → ${eur(sc.plaatsingenPm * proj.gemFee)}</b></div>
+        <div class="slider-row"><span>Blijfkans (blijven na plaatsing)</span>
+          <input type="range" id="sc_blijf" min="0" max="100" step="5" value="${Math.round(sc.blijfkans * 100)}"><b id="scv_blijf">${Math.round(sc.blijfkans * 100)}%</b></div>
+        <div class="slider-row"><span>Vast €-bedrag p/m <span class="muted">(alleen bij "vast")</span></span>
           <input type="range" id="sc_omzet" min="0" max="60000" step="1000" value="${sc.omzetPm}"><b id="scv_omzet">${eur(sc.omzetPm)}</b></div>
-        <div class="slider-row"><span>Omzet valt terug met</span>
+        <div class="slider-row"><span>Omzet valt extra terug met</span>
           <input type="range" id="sc_dip" min="0" max="100" step="5" value="${sc.omzetDipPct * 100}"><b id="scv_dip">${Math.round(sc.omzetDipPct * 100)}%</b></div>
         <div class="slider-row"><span>Flex-marge (t.o.v. run-rate)</span>
           <input type="range" id="sc_flex" min="0" max="300" step="10" value="${sc.flexFactor * 100}"><b id="scv_flex">${Math.round(sc.flexFactor * 100)}%</b></div>
@@ -163,7 +224,7 @@ function renderCashflow(root) {
           <select id="sc_hireVanaf">${maandOpts}</select><span></span></div>
         <div class="slider-row"><span>Geplande aflossingen meenemen</span>
           <input type="checkbox" id="sc_afl" ${sc.aflossenAan ? 'checked' : ''} style="width:auto;justify-self:start"><span></span></div>
-        <p class="muted">Deze knoppen zijn tijdelijk (wat-als). Het standaard omzet-scenario stel je in bij Instellingen.</p>
+        <p class="muted">Wat-als (tijdelijk). Tempo × gem. fee (${eur(proj.gemFee)}) × blijfkans = nieuwe omzet per maand. Fase-kansen stel je in bij Instellingen.</p>
       </div>
       <div class="panel"><h2>🏛 Lening ${lening ? '· ' + esc(lening.naam) : ''}</h2>
         ${lening ? `
@@ -177,14 +238,17 @@ function renderCashflow(root) {
       </div>
     </div>
 
-    <div class="panel mb"><div class="spread mb"><h2>🔮 Gewogen pijplijn-forecast <span class="muted">— live van het bord</span></h2>
-      <span class="muted">totaal gewogen: <b>${eur(pf.totaal)}</b> excl. btw</span></div>
-      ${pf.rows.length ? `<div class="table-wrap"><table>
+    <div class="panel mb"><div class="spread mb"><h2>🔮 Wat zit er in de pijplijn <span class="muted">— live van het bord</span></h2>
+      <span class="muted">gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> plaatsingen · <b>${eur(pf.totaal)}</b> excl. btw</span></div>
+      ${pf.rows.length ? `
+      <div class="mb">Verwachte plaatsingen per maand (gewogen koppen): ${plChips || '—'}
+        <p class="muted mt">Om <b>${behoefte}</b> plaatsing${behoefte === 1 ? '' : 'en'} per maand te halen, moet de pijplijn dat tempo blijven voeden. Nu staat er gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> op de rol voor de komende ~2 maanden — ${pf.verwachtAantal >= behoefte ? '<b style="color:var(--green)">genoeg om het tempo vast te houden</b>' : `<b style="color:var(--amber)">${(behoefte - pf.verwachtAantal).toFixed(1)} te weinig</b> — er moet bovenaan de funnel bij`}.</p></div>
+      <div class="table-wrap"><table>
       <tr><th>Kandidaat</th><th>Klant</th><th>Fase</th><th class="num">Kans</th><th class="num">Fee (gem.)</th><th class="num">Gewogen</th><th>Cash verwacht</th></tr>
       ${pf.rows.map(r => `<tr><td>${esc(r.c.naam)}</td><td>${esc(r.c.klant || '')}</td><td>${tag(r.c.fase, r.kans >= .5 ? 'green' : r.kans >= .25 ? 'amber' : 'gray')}</td>
         <td class="num">${Math.round(r.kans * 100)}%</td><td class="num">${eur(r.fee)}</td><td class="num"><b>${eur(r.gewogen)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
       </table></div>
-      <p class="muted mt">Kans per fase (aanpasbaar op verzoek): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Fee = je gemiddelde. Bij "Gewogen pijplijn" rekent de projectie hiermee; na de bord-horizon geldt het vaste bedrag.</p>`
+      <p class="muted mt">Kans per fase (instelbaar): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Gewogen = kans × gem. fee. Na de bord-horizon rekent de projectie met het target-tempo.</p>`
       : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
 
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>`;
@@ -193,12 +257,16 @@ function renderCashflow(root) {
   const upd = () => {
     $('#cfDyn').innerHTML = cfDynHtml(sc);
     $('#cfTabel').innerHTML = cfTabelHtml(sc);
+    $('#scv_pl').textContent = `${sc.plaatsingenPm} → ${eur(sc.plaatsingenPm * proj.gemFee)}`;
+    $('#scv_blijf').textContent = Math.round(sc.blijfkans * 100) + '%';
     $('#scv_omzet').textContent = eur(sc.omzetPm);
     $('#scv_dip').textContent = Math.round(sc.omzetDipPct * 100) + '%';
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
     $('#scv_hire').textContent = eur(sc.extraHirePm);
   };
   $('#sc_bron').onchange = e => { sc.bron = e.target.value; upd(); };
+  $('#sc_pl').oninput = e => { sc.plaatsingenPm = +e.target.value; upd(); };
+  $('#sc_blijf').oninput = e => { sc.blijfkans = +e.target.value / 100; upd(); };
   $('#sc_omzet').oninput = e => { sc.omzetPm = +e.target.value; upd(); };
   $('#sc_dip').oninput = e => { sc.omzetDipPct = +e.target.value / 100; upd(); };
   $('#sc_flex').oninput = e => { sc.flexFactor = +e.target.value / 100; upd(); };

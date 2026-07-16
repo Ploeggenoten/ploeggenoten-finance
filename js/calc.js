@@ -369,20 +369,47 @@ function pipelineForecast() {
     })
     .sort((a, b) => b.kans - a.kans);
   const totaal = rows.reduce((s, r) => s + r.gewogen, 0);
-  const perMaand = {};
-  for (const r of rows) perMaand[r.cashMaand] = (perMaand[r.cashMaand] || 0) + r.gewogen;
-  return { rows, totaal, perMaand };
+  const perMaand = {}, perMaandAantal = {}, perMaandPlaatsMaand = {};
+  for (const r of rows) {
+    perMaand[r.cashMaand] = (perMaand[r.cashMaand] || 0) + r.gewogen;
+    perMaandAantal[r.cashMaand] = (perMaandAantal[r.cashMaand] || 0) + r.kans;
+    const pm = monthKey(r.plaatsing);                        // maand van de plaatsing zelf (niet de cash)
+    perMaandPlaatsMaand[pm] = (perMaandPlaatsMaand[pm] || 0) + r.kans;
+  }
+  // verwacht aantal plaatsingen = som van de kansen (gewogen koppen)
+  const verwachtAantal = rows.reduce((s, r) => s + r.kans, 0);
+  return { rows, totaal, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal };
+}
+
+// ── plaatsingen exact zoals het bord ze telt ───────────────────
+// Bron van waarheid = het bord: kandidaten met geplaatstOp in de maand
+// (W&S + Flex), minus wie deze maand gestopt is (geen garantievervangers).
+// Zo correspondeert de finance-telling 1-op-1 met de teller op het bord.
+function boardPlaatsingen(mk) {                             // mk = 'YYYY-MM'
+  const grossM = D.candidates.filter(c => (c.geplaatst_op || '').slice(0, 7) === mk);
+  const ws = grossM.filter(c => c.type === 'W&S').length;
+  const flex = grossM.filter(c => isFlexType(c.type)).length;
+  const onb = grossM.length - ws - flex;
+  const stopM = D.candidates.filter(c => c.fase === 'Gestopt' &&
+    (c.gestopt_op || '').slice(0, 7) === mk && c.geplaatst_op && !(c.vervangt || '')).length;
+  return { gross: grossM.length, ws, flex, onb, stopM, netto: grossM.length - stopM };
+}
+
+// het maandtarget zoals op het bord: specifieke maand, anders '__default', anders 8
+function boardTarget(mk) {
+  const specifiek = D.targets.find(x => x.maand === mk);
+  const standaard = D.targets.find(x => x.maand === '__default');
+  return specifiek ? Number(specifiek.aantal) : standaard ? Number(standaard.aantal) : 8;
 }
 
 // ── targets van het pijplijnbord ───────────────────────────────
 function targetInfo() {
   const mk = todayISO().slice(0, 7);                       // '2026-07'
-  const row = D.targets.find(x => x.maand === mk);
-  const aantalTarget = row ? Number(row.aantal) : null;
-  const plaatsingen = D.placements.filter(p => (p.contract_datum || '').slice(0, 7) === mk).length;
+  const bp = boardPlaatsingen(mk);
+  const aantalTarget = boardTarget(mk);
   const gemFee = kpis().gemFee || 8500;
   const omzetTarget = S('target_omzet_pm') || (aantalTarget ? aantalTarget * gemFee : null);
-  return { aantalTarget, plaatsingen, omzetTarget, maand: mk };
+  return { aantalTarget, plaatsingen: bp.netto, board: bp, gemFee, omzetTarget, maand: mk };
 }
 
 // ── wervingskanalen & team (via gekoppelde bord-kandidaten) ────
@@ -610,9 +637,14 @@ function potjes() {
 // ── cashflow-projectie ─────────────────────────────────────────
 // scenario = { omzetPm, omzetDipPct, extraHirePm, extraHireVanaf, aflossenAan }
 function projectie(maanden = 12, scenario = {}) {
+  const k0 = kpis();
+  const gemFee = k0.gemFee || Number(S('scenario_gem_fee', 8500));
+  const behoudDefault = 1 - (k0.stopPct || 0);            // historische blijfkans
   const sc = Object.assign({
-    bron: 'pijplijn',                                 // 'pijplijn' = gewogen forecast van het bord; 'vast' = vlak bedrag
+    bron: 'pijplijn',                                 // 'pijplijn' = gewogen forecast bord; 'target' = X plaatsingen/mnd; 'vast' = vlak €-bedrag
+    plaatsingenPm: boardTarget(todayISO().slice(0, 7)), // target-tempo (koppen per maand)
     omzetPm: Number(S('scenario_omzet_pm', 25000)),
+    blijfkans: behoudDefault,                          // kans dat een plaatsing blijft (geen stop binnen garantie)
     omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 1, aflossenAan: true,
     flexFactor: 1,                                    // 1 = flex blijft op run-rate; 2 = verdubbelt; 0 = valt weg
   }, scenario);
@@ -637,15 +669,21 @@ function projectie(maanden = 12, scenario = {}) {
     }
   }
   // 2. scenario: nieuwe W&S-omzet (facturen volgen ~1 mnd later, incl. btw)
+  const blijf = Math.max(0, Math.min(1, sc.blijfkans));
+  const targetPm = sc.plaatsingenPm * gemFee * blijf;      // target-tempo in euro's, na verwachte uitval
   if (sc.bron === 'pijplijn' && D.candidates.length) {
     // gewogen forecast uit het bord: kans × fee per kandidaat, in de verwachte cash-maand.
-    // Ná de bord-horizon (kandidaten kijken ~2 mnd vooruit) valt terug op het vlakke scenario.
+    // Weeg óók de blijfkans mee (kans dat een geplaatste toch weer stopt binnen garantie).
+    // Ná de bord-horizon (kandidaten kijken ~2 mnd vooruit) valt terug op het target-tempo.
     const pf = pipelineForecast();
     const horizon = Object.keys(pf.perMaand).sort().pop() || m0;
     keys.forEach((k, i) => {
-      if (pf.perMaand[k]) put(k, 'inScenario', pf.perMaand[k] * (1 - sc.omzetDipPct) * (1 + btwPct));
-      else if (k > horizon && i >= 1) put(k, 'inScenario', sc.omzetPm * (1 - sc.omzetDipPct) * (1 + btwPct));
+      if (pf.perMaand[k]) put(k, 'inScenario', pf.perMaand[k] * blijf * (1 - sc.omzetDipPct) * (1 + btwPct));
+      else if (k > horizon && i >= 1) put(k, 'inScenario', targetPm * (1 - sc.omzetDipPct) * (1 + btwPct));
     });
+  } else if (sc.bron === 'target') {
+    // "als we elke maand X plaatsingen halen": vlak tempo vanaf volgende maand
+    keys.forEach((k, i) => { if (i >= 1) put(k, 'inScenario', targetPm * (1 - sc.omzetDipPct) * (1 + btwPct)); });
   } else {
     const omzet = sc.omzetPm * (1 - sc.omzetDipPct);
     keys.forEach((k, i) => { if (i >= 1) put(k, 'inScenario', omzet * (1 + btwPct)); });
@@ -700,5 +738,6 @@ function projectie(maanden = 12, scenario = {}) {
     if (rSaldo < 0) break;
     runway++;
   }
-  return { rows, start, laagste, negatief, runway, scenario: sc };
+  const eind = rows[rows.length - 1].saldo;
+  return { rows, start, eind, laagste, negatief, runway, scenario: sc, gemFee, blijfkans: blijf, behoudDefault };
 }
