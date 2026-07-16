@@ -104,7 +104,8 @@ function cfDynHtml(sc) {
 
   // ── drie vooruitblik-scenario's (zelfde blijfkans/aflossing, ander tempo) ──
   const base = { aflossenAan: sc.aflossenAan, blijfkans: sc.blijfkans, flexFactor: sc.flexFactor };
-  const down = Math.max(0, tgt - 2);
+  const marge = sc.tegenvallerMarge ?? 2;
+  const down = Math.max(0, tgt - marge);
   const sTarget   = projectie(12, { ...base, bron: 'target',   plaatsingenPm: tgt });
   const sVerwacht = projectie(12, { ...base, bron: 'pijplijn', plaatsingenPm: tgt });
   const sDown     = projectie(12, { ...base, bron: 'target',   plaatsingenPm: down });
@@ -177,11 +178,12 @@ function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
   const behoud0 = 1 - (kpis().stopPct || 0);
   const sc = scenarioState || (scenarioState = {
-    bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0,
+    bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0, tegenvallerMarge: 2,
     omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
   });
   if (sc.plaatsingenPm == null) sc.plaatsingenPm = tgt0;
   if (sc.blijfkans == null) sc.blijfkans = behoud0;
+  if (sc.tegenvallerMarge == null) sc.tegenvallerMarge = 2;
   const pf = pipelineForecast();
   const proj = projectie(12, sc);
   const lening = D.loans[0];
@@ -212,6 +214,8 @@ function renderCashflow(root) {
           <input type="range" id="sc_pl" min="0" max="15" step="1" value="${sc.plaatsingenPm}"><b id="scv_pl">${sc.plaatsingenPm} → ${eur(sc.plaatsingenPm * proj.gemFee)}</b></div>
         <div class="slider-row"><span>Blijfkans (blijven na plaatsing)</span>
           <input type="range" id="sc_blijf" min="0" max="100" step="5" value="${Math.round(sc.blijfkans * 100)}"><b id="scv_blijf">${Math.round(sc.blijfkans * 100)}%</b></div>
+        <div class="slider-row"><span>Tegenvaller: onder target</span>
+          <input type="range" id="sc_marge" min="1" max="6" step="1" value="${sc.tegenvallerMarge}"><b id="scv_marge">−${sc.tegenvallerMarge}/mnd → ${Math.max(0, tgt0 - sc.tegenvallerMarge)}</b></div>
         <div class="slider-row"><span>Vast €-bedrag p/m <span class="muted">(alleen bij "vast")</span></span>
           <input type="range" id="sc_omzet" min="0" max="60000" step="1000" value="${sc.omzetPm}"><b id="scv_omzet">${eur(sc.omzetPm)}</b></div>
         <div class="slider-row"><span>Omzet valt extra terug met</span>
@@ -259,6 +263,7 @@ function renderCashflow(root) {
     $('#cfTabel').innerHTML = cfTabelHtml(sc);
     $('#scv_pl').textContent = `${sc.plaatsingenPm} → ${eur(sc.plaatsingenPm * proj.gemFee)}`;
     $('#scv_blijf').textContent = Math.round(sc.blijfkans * 100) + '%';
+    $('#scv_marge').textContent = `−${sc.tegenvallerMarge}/mnd → ${Math.max(0, tgt0 - sc.tegenvallerMarge)}`;
     $('#scv_omzet').textContent = eur(sc.omzetPm);
     $('#scv_dip').textContent = Math.round(sc.omzetDipPct * 100) + '%';
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
@@ -267,6 +272,7 @@ function renderCashflow(root) {
   $('#sc_bron').onchange = e => { sc.bron = e.target.value; upd(); };
   $('#sc_pl').oninput = e => { sc.plaatsingenPm = +e.target.value; upd(); };
   $('#sc_blijf').oninput = e => { sc.blijfkans = +e.target.value / 100; upd(); };
+  $('#sc_marge').oninput = e => { sc.tegenvallerMarge = +e.target.value; upd(); };
   $('#sc_omzet').oninput = e => { sc.omzetPm = +e.target.value; upd(); };
   $('#sc_dip').oninput = e => { sc.omzetDipPct = +e.target.value / 100; upd(); };
   $('#sc_flex').oninput = e => { sc.flexFactor = +e.target.value / 100; upd(); };
