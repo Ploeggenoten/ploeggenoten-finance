@@ -233,12 +233,14 @@ async function autoCreatePlacements() {
 const FASE_KANSEN_DEFAULT = {
   'Voorgesteld': .10, 'Voorselectie': .10, 'O&O sessie': .25,
   'Eerste gesprek': .20, 'Tweede gesprek': .35, 'Meeloopdag': .50,
+  'In de wacht': .60,            // goede kandidaten, wachten op startmoment/contractruimte
   'Contract ondertekenen': .80,
 };
 // verwachte weken tot plaatsing per fase (voor timing van de cash)
 const FASE_LEAD_WKN = {
   'Voorgesteld': 8, 'Voorselectie': 8, 'O&O sessie': 6,
   'Eerste gesprek': 6, 'Tweede gesprek': 5, 'Meeloopdag': 4,
+  'In de wacht': 8,              // zonder startdatum: ruime aanname; mét startdatum telt die
   'Contract ondertekenen': 2,
 };
 
