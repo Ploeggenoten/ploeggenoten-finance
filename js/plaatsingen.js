@@ -279,7 +279,7 @@ function openInstallmentEdit(inst, pid) {
 }
 
 // ── hoofdview ──────────────────────────────────────────────────
-let plFilter = { klant: '', status: 'actief' };
+let plFilter = { klant: '', status: 'actief', naam: '' };
 
 function renderPlaatsingen(root) {
   const inbox = inboxCandidates();
@@ -295,9 +295,11 @@ function renderPlaatsingen(root) {
 
   // nieuwste bovenaan (hoogste P-nummer eerst), gefilterd op klant + status
   const pNum = p => parseInt((p.id || '').replace(/\D/g, '')) || 0;
+  const zoek = plFilter.naam.trim().toLowerCase();
   const zichtbaar = D.placements.filter(p =>
     (!plFilter.klant || p.klant === plFilter.klant) &&
-    (plFilter.status === 'alles' || (plFilter.status === 'gestopt' ? p.gestopt_op : !p.gestopt_op)));
+    (plFilter.status === 'alles' || (plFilter.status === 'gestopt' ? p.gestopt_op : !p.gestopt_op)) &&
+    (!zoek || (p.kandidaat || '').toLowerCase().includes(zoek) || (p.id || '').toLowerCase().includes(zoek) || (p.klant || '').toLowerCase().includes(zoek)));
   const rows = zichtbaar.slice().sort((a, b) => pNum(b) - pNum(a)).map(p => {
     const st = placementStats(p);
     const g = garantie(p);
@@ -328,9 +330,12 @@ function renderPlaatsingen(root) {
   const nTotaal = D.placements.length;
   const nActief = D.placements.filter(p => !p.gestopt_op).length;
   const nGestopt = D.placements.filter(p => p.gestopt_op).length;
+  const gefilterd = plFilter.naam || plFilter.klant || plFilter.status !== 'actief';
+  const teller = gefilterd ? `${zichtbaar.length} gevonden` : `${nTotaal} totaal · ${nActief} actief · ${nGestopt} gestopt`;
   root.innerHTML = `
-    <div class="spread mb"><h1>Plaatsingen <span style="font-family:var(--font);font-size:15px;font-weight:600;color:var(--muted)">· ${plFilter.klant ? zichtbaar.length + ' bij ' + esc(plFilter.klant) : nTotaal + ' totaal · ' + nActief + ' actief · ' + nGestopt + ' gestopt'}</span></h1>
+    <div class="spread mb"><h1>Plaatsingen <span style="font-family:var(--font);font-size:15px;font-weight:600;color:var(--muted)">· ${teller}</span></h1>
       <div class="row">
+        <input id="plZoek" placeholder="Zoek naam / P-nr / klant…" value="${esc(plFilter.naam)}" style="width:200px">
         <select id="plStatus" style="width:auto">
           <option value="actief" ${plFilter.status === 'actief' ? 'selected' : ''}>Actief lopend</option>
           <option value="gestopt" ${plFilter.status === 'gestopt' ? 'selected' : ''}>Gestopt</option>
@@ -356,6 +361,11 @@ function renderPlaatsingen(root) {
 
   $('#plKlant').onchange = e => { plFilter.klant = e.target.value; rerender(); };
   $('#plStatus').onchange = e => { plFilter.status = e.target.value; rerender(); };
+  const zoekEl = $('#plZoek');
+  zoekEl.oninput = e => {
+    plFilter.naam = e.target.value; rerender();
+    const el = $('#plZoek'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+  };
   $('#plNieuw').onclick = () => openPlacementWizard({});
   root.addEventListener('click', async e => {
     const kf = e.target.closest('tr[data-kfilter]');
