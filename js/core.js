@@ -118,6 +118,27 @@ function toast(msg, isErr = false) {
   setTimeout(() => el.remove(), isErr ? 6000 : 3200);
 }
 
+// toast met "Ongedaan maken"-knop; ook via Cmd/Ctrl+Z de laatste actie terugdraaien
+let lastUndo = null;
+function toastUndo(msg, undoFn) {
+  lastUndo = undoFn;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span>${esc(msg)}</span> <button class="btn small" style="margin-left:10px;padding:2px 10px">Ongedaan maken ⌘Z</button>`;
+  el.querySelector('button').onclick = async () => { el.remove(); const fn = lastUndo; lastUndo = null; if (fn) await fn(); };
+  $('#toastRoot').appendChild(el);
+  setTimeout(() => { el.remove(); if (lastUndo === undoFn) lastUndo = null; }, 8000);
+}
+document.addEventListener('keydown', async e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && lastUndo &&
+      !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) {
+    e.preventDefault();
+    const fn = lastUndo; lastUndo = null;
+    $('#toastRoot').querySelectorAll('.toast').forEach(t => t.remove());
+    await fn();
+  }
+});
+
 function openModal(html, { narrow = false } = {}) {
   const bg = document.createElement('div');
   bg.className = 'modal-bg';

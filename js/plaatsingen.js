@@ -1,13 +1,18 @@
 // ═══ VIEW: Plaatsingen — inbox, lijst, wizard, detail ═══
 
 async function markeerInstallment(inst, status, datum) {
+  const vorige = { status: inst.status, factuurdatum: inst.factuurdatum ?? null, betaaldatum: inst.betaaldatum ?? null };
   const veld = status === 'gefactureerd' ? 'factuurdatum' : status === 'betaald' ? 'betaaldatum' : null;
   const patch = { status };
   if (veld) patch[veld] = datum || todayISO();
   if (status === 'betaald' && !inst.factuurdatum) patch.factuurdatum = inst.geplande_datum || todayISO();
   await dbWrite('fin_installments', t => t.update(patch).eq('id', inst.id));
   await reload('fin_installments', 'installments', 'geplande_datum');
-  toast(`Termijn ${inst.termijn_nr} → ${status}`);
+  toastUndo(`Termijn ${inst.termijn_nr} → ${status}`, async () => {
+    await dbWrite('fin_installments', t => t.update(vorige).eq('id', inst.id));
+    await reload('fin_installments', 'installments', 'geplande_datum');
+    toast('Teruggedraaid'); rerender();
+  });
   rerender();
 }
 
