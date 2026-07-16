@@ -279,8 +279,11 @@ function openInstallmentEdit(inst, pid) {
 }
 
 // ── hoofdview ──────────────────────────────────────────────────
+let plFilter = { klant: '' };
+
 function renderPlaatsingen(root) {
   const inbox = inboxCandidates();
+  const klantRows = perKlantStats();
   const inboxHtml = inbox.length ? `
     <div class="panel mb"><h2>📥 Vanuit het pijplijnbord — plaatsing afronden</h2>
     ${inbox.map(c => `<div class="actie warn"><div class="ico">👤</div>
@@ -290,9 +293,10 @@ function renderPlaatsingen(root) {
       <button class="btn small ghost" data-dismiss="${esc(c.id)}" title="Niet factureren">✕</button></div>`).join('')}
     </div>` : '';
 
-  // sorteer op P-nummer (zoals de oude Excel); nieuwe/concept-plaatsingen vallen vanzelf onderaan
+  // nieuwste bovenaan (hoogste P-nummer eerst), optioneel gefilterd op klant
   const pNum = p => parseInt((p.id || '').replace(/\D/g, '')) || 0;
-  const rows = D.placements.slice().sort((a, b) => pNum(a) - pNum(b)).map(p => {
+  const zichtbaar = D.placements.filter(p => !plFilter.klant || p.klant === plFilter.klant);
+  const rows = zichtbaar.slice().sort((a, b) => pNum(b) - pNum(a)).map(p => {
     const st = placementStats(p);
     const g = garantie(p);
     return `<tr class="clickable" data-pid="${esc(p.id)}">
@@ -306,16 +310,45 @@ function renderPlaatsingen(root) {
       <td>${p.concept ? tag('✨ concept', 'amber') + ' ' : ''}${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}</td></tr>`;
   }).join('');
 
+  const klantTabel = klantRows.map(k => `<tr class="clickable ${plFilter.klant === k.klant ? '' : ''}" data-kfilter="${esc(k.klant)}">
+    <td>${plFilter.klant === k.klant ? '▸ ' : ''}<b>${esc(k.klant)}</b></td>
+    <td class="num">${k.n}${k.gestopt ? ` <span class="muted">(${k.gestopt}×⏹)</span>` : ''}</td>
+    <td class="num">${eur(k.fee)}</td>
+    <td class="num">${eur(k.gefact)}</td>
+    <td class="num">${eur(k.betaald)}</td>
+    <td class="num">${k.open ? `<b style="color:var(--amber)">${eur(k.open)}</b>` : '—'}</td>
+    <td class="num">${k.nog ? eur(k.nog) : '—'}</td>
+    <td class="num">${k.vervallen ? `<span style="color:var(--red)">${eur(k.vervallen)}</span>` : '—'}</td>
+    <td class="num"><b>${eur(k.netto)}</b> <span class="muted">(${pct(k.aandeel)})</span></td>
+    <td class="num">${k.winstIndicatie != null ? eur(k.winstIndicatie) : '—'}</td></tr>`).join('');
+  const kTot = klantRows.reduce((t, k) => ({ n: t.n + k.n, fee: t.fee + k.fee, gefact: t.gefact + k.gefact, betaald: t.betaald + k.betaald, open: t.open + k.open, nog: t.nog + k.nog, vervallen: t.vervallen + k.vervallen, netto: t.netto + k.netto, w: t.w + (k.winstIndicatie || 0) }), { n: 0, fee: 0, gefact: 0, betaald: 0, open: 0, nog: 0, vervallen: 0, netto: 0, w: 0 });
+
   root.innerHTML = `
     <div class="spread mb"><h1>Plaatsingen</h1>
-      <button class="btn primary" id="plNieuw">+ Nieuwe plaatsing</button></div>
+      <div class="row">
+        <select id="plKlant" style="width:auto">
+          <option value="">Alle klanten</option>
+          ${klantRows.map(k => `<option ${plFilter.klant === k.klant ? 'selected' : ''}>${esc(k.klant)}</option>`).join('')}
+        </select>
+        <button class="btn primary" id="plNieuw">+ Nieuwe plaatsing</button>
+      </div></div>
     ${inboxHtml}
-    <div class="panel table-wrap"><table>
+    <div class="panel mb"><h2>🏢 Per klant <span class="muted">— klik op een klant om te filteren</span></h2>
+      <div class="table-wrap"><table>
+      <tr><th>Klant</th><th class="num">Plaats.</th><th class="num">Fee totaal</th><th class="num">Gefactureerd</th><th class="num">Betaald</th><th class="num">Open</th><th class="num">Nog te fact.</th><th class="num">Vervallen</th><th class="num">Netto omzet</th><th class="num">Winst-indicatie*</th></tr>
+      ${klantTabel}
+      <tr><td><b>Totaal</b></td><td class="num"><b>${kTot.n}</b></td><td class="num"><b>${eur(kTot.fee)}</b></td><td class="num"><b>${eur(kTot.gefact)}</b></td><td class="num"><b>${eur(kTot.betaald)}</b></td><td class="num"><b>${eur(kTot.open)}</b></td><td class="num"><b>${eur(kTot.nog)}</b></td><td class="num"><b>${eur(kTot.vervallen)}</b></td><td class="num"><b>${eur(kTot.netto)}</b></td><td class="num"><b>${kTot.w ? eur(kTot.w) : '—'}</b></td></tr>
+      </table></div>
+      <p class="muted mt">* Winst-indicatie = netto omzet × je bedrijfsbrede winstmarge (live uit Yuki). Kosten worden niet per klant geregistreerd, dus dit is naar rato.</p></div>
+    <div class="panel table-wrap">${plFilter.klant ? `<h2>Plaatsingen · ${esc(plFilter.klant)}</h2>` : ''}<table>
       <tr><th>ID</th><th>Klant</th><th>Kandidaat</th><th>Contract</th><th class="num">Fee excl.</th><th>Stand</th><th class="num">Betaald</th><th class="num">Open</th><th class="num">Nog te fact.</th><th>Status</th></tr>
-      ${rows || '<tr><td colspan="10" class="empty">Nog geen plaatsingen</td></tr>'}</table></div>`;
+      ${rows || '<tr><td colspan="10" class="empty">Geen plaatsingen' + (plFilter.klant ? ' voor deze klant' : '') + '</td></tr>'}</table></div>`;
 
+  $('#plKlant').onchange = e => { plFilter.klant = e.target.value; rerender(); };
   $('#plNieuw').onclick = () => openPlacementWizard({});
   root.addEventListener('click', async e => {
+    const kf = e.target.closest('tr[data-kfilter]');
+    if (kf) { plFilter.klant = plFilter.klant === kf.dataset.kfilter ? '' : kf.dataset.kfilter; return rerender(); }
     const cand = e.target.closest('[data-cand]');
     if (cand) return openPlacementWizard({ candidate: D.candidates.find(c => c.id === cand.dataset.cand) });
     const dis = e.target.closest('[data-dismiss]');

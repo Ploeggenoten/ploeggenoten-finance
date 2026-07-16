@@ -5,7 +5,7 @@ const instOf = pid => D.installments.filter(i => i.placement_id === pid)
 
 function vervaldatum(inst, p) {
   const basis = inst.factuurdatum || inst.geplande_datum;
-  return basis ? addDays(basis, p ? p.betaaltermijn_dgn : 14) : null;
+  return basis ? addDays(basis, Number(p?.betaaltermijn_dgn) || 14) : null;
 }
 
 // aggregaten per plaatsing
@@ -338,6 +338,26 @@ function kpis() {
     plaatsingenYtd: plYtd.length, gemFee,
     stopPct: D.placements.length ? gestopt / D.placements.length : 0,
   };
+}
+
+// volledig overzicht per klant (voor het Plaatsingen-scherm)
+function perKlantStats() {
+  const per = {};
+  for (const p of D.placements) {
+    const st = placementStats(p);
+    const k = per[p.klant] = per[p.klant] || { klant: p.klant, n: 0, fee: 0, gefact: 0, betaald: 0, open: 0, nog: 0, vervallen: 0, gestopt: 0 };
+    k.n++; k.fee += Number(p.fee_excl || 0);
+    k.gefact += st.gefact; k.betaald += st.betaald; k.open += st.open;
+    k.nog += st.nog; k.vervallen += st.vervallen;
+    if (p.gestopt_op) k.gestopt++;
+  }
+  const rows = Object.values(per).map(k => ({ ...k, netto: k.fee - k.vervallen }));
+  const totNetto = rows.reduce((s, r) => s + r.netto, 0) || 1;
+  // winst-indicatie: bedrijfsbrede marge (liefst live uit Yuki) toegerekend naar omzet-aandeel
+  const marge = Number(S('yuki_omzet_ytd', 0)) > 0
+    ? Number(S('yuki_winst_ytd', 0)) / Number(S('yuki_omzet_ytd', 1)) : null;
+  rows.forEach(r => { r.aandeel = r.netto / totNetto; r.winstIndicatie = marge != null ? r.netto * marge : null; });
+  return rows.sort((a, b) => b.netto - a.netto);
 }
 
 function concentratie() {
