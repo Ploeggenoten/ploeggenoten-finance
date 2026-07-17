@@ -151,3 +151,14 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
 .empty { color: var(--muted); padding: 18px; text-align: center; }
 .pot { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--line); gap: 12px; }
 .pot:last-child { border-bottom: none; }
+
+/* klikbare uitleg per sectie */
+.uitleg { cursor: pointer; font-size: 11px; font-weight: 700; color: var(--accent); background: rgba(200,241,53,.10);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: 6px; white-space: nowrap; user-select: none; text-transform: none; letter-spacing: 0; }
+.uitleg:hover { background: var(--accent); color: var(--bg); }
+.kpi[data-uitleg] { transition: border-color .12s; }
+.kpi[data-uitleg]:hover { border-color: var(--accent); }
+.uitleg-body { font-size: 14px; }
+.uitleg-body p { margin: 0 0 12px; line-height: 1.55; color: var(--muted); }
+.uitleg-body p:last-child { margin-bottom: 0; }
+.uitleg-body b { color: var(--txt); }
