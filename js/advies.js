@@ -216,14 +216,23 @@ function renderAdvies(root) {
   const kanalen = kanaalStats();
   const kTot = kanalen.reduce((s, k) => s + k.omzet, 0) || 1;
   const team = teamStats();
+  const rv = recruiterVoortgang();
   const kanaalHtml = kanalen.length ? `<div class="table-wrap"><table>
     <tr><th>Kanaal</th><th class="num">Plaatsingen</th><th class="num">Omzet (na uitval)</th><th class="num">Aandeel</th></tr>
     ${kanalen.map(k => `<tr><td>${esc(k.bron)}</td><td class="num">${k.n}</td><td class="num">${eur(k.omzet)}</td><td class="num">${pct(k.omzet / kTot)}</td></tr>`).join('')}
     </table></div><p class="muted mt">Bron per kandidaat komt van het pijplijnbord. Leg dit naast je advertentie-uitgaven (Kosten → Marketing & verkoop) om te zien welk kanaal opschalen verdient.</p>`
     : '<div class="empty">Nog geen bronnen gekoppeld.</div>';
   const teamHtml = `
-    ${team.recruiters.length ? `<div class="table-wrap"><table>
-    <tr><th>Recruiter</th><th class="num">Plaatsingen</th><th class="num">Omzet (na uitval)</th></tr>
+    ${rv.rows.length ? `<div class="muted" style="font-size:11px;margin-bottom:6px">🎯 Deze maand · maandtarget ${rv.tgt ?? '—'}${rv.rows.some(r => r.gelijkVerdeeld) ? ' — gelijk verdeeld, per persoon aanpasbaar' : ''}</div>
+    <div class="table-wrap"><table>
+    <tr><th>Recruiter</th><th class="num">Deze maand</th><th class="num">Doel</th><th>Voortgang</th></tr>
+    ${rv.rows.map(r => { const p = r.doel ? Math.min(100, Math.round(r.gedaan / r.doel * 100)) : 0; const hit = r.doel && r.gedaan >= r.doel; return `<tr><td>${esc(r.rec)}</td>
+      <td class="num"><b style="color:${hit ? 'var(--green)' : 'var(--txt)'}">${r.gedaan}</b></td>
+      <td class="num"><input class="recdoel" data-rec="${esc(r.rec)}" type="number" min="0" value="${r.doel}" style="width:46px;text-align:right"></td>
+      <td style="min-width:90px"><div class="rvbar"><i style="width:${p}%;background:${hit ? 'var(--green)' : 'var(--accent)'}"></i></div></td></tr>`; }).join('')}
+    </table></div>` : ''}
+    ${team.recruiters.length ? `<h3 style="margin-top:12px">Omzet YTD (na uitval)</h3><div class="table-wrap"><table>
+    <tr><th>Recruiter</th><th class="num">Plaatsingen</th><th class="num">Omzet</th></tr>
     ${team.recruiters.map(r => `<tr><td>${esc(r.rec)}</td><td class="num">${r.n}</td><td class="num">${eur(r.omzet)}</td></tr>`).join('')}
     </table></div>` : '<div class="empty">Nog geen recruiters gekoppeld.</div>'}
     ${team.timeToFill != null ? `<div class="pot mt"><span>Gem. doorlooptijd bord → plaatsing</span><b>${team.timeToFill} dgn</b></div>` : ''}`;
@@ -254,4 +263,13 @@ function renderAdvies(root) {
       <div class="panel"><h2>📣 Wervingskanalen ${uitlegChip('a_kanaal')}</h2>${kanaalHtml}</div>
       <div class="panel"><h2>👥 Team & snelheid ${uitlegChip('a_team')}</h2>${teamHtml}</div>
     </div>`;
+
+  root.addEventListener('change', async e => {
+    const inp = e.target.closest('.recdoel');
+    if (!inp) return;
+    const cur = { ...(S('recruiter_targets', {}) || {}) };
+    cur[inp.dataset.rec] = Math.max(0, Number(inp.value) || 0);
+    await saveSetting('recruiter_targets', cur);
+    toast(`Doel voor ${inp.dataset.rec} opgeslagen ✓`); rerender();
+  });
 }

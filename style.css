@@ -162,3 +162,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
 .uitleg-body p { margin: 0 0 12px; line-height: 1.55; color: var(--muted); }
 .uitleg-body p:last-child { margin-bottom: 0; }
 .uitleg-body b { color: var(--txt); }
+
+/* mini voortgangsbalk (recruiter-target) */
+.rvbar { height: 7px; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.rvbar i { display: block; height: 100%; border-radius: 999px; }
+input.recdoel { background: var(--panel2); border: 1px solid var(--line); color: var(--txt); border-radius: 6px; padding: 2px 4px; font: inherit; font-size: 12px; }

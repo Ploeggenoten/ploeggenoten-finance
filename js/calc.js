@@ -460,6 +460,63 @@ function targetInfo() {
   return { aantalTarget, plaatsingen: bp.netto, board: bp, gemFee, omzetTarget, maand: mk };
 }
 
+// ── target per recruiter (deze maand) ──────────────────────────
+function recruiterVoortgang() {
+  const mk = todayISO().slice(0, 7);
+  const tgt = targetInfo().aantalTarget;
+  const per = {}, actief = new Set();
+  for (const c of D.candidates) {
+    const rec = ((c.rec || '').trim()) || 'Samen';
+    if (!['Afgevallen', 'Gestopt'].includes(c.fase)) actief.add(rec);
+    if ((c.geplaatst_op || '').slice(0, 7) === mk && !(c.vervangt || '')) per[rec] = (per[rec] || 0) + 1;
+  }
+  const recs = [...new Set([...Object.keys(per), ...actief])].filter(r => r && r !== 'Samen');
+  if (!recs.length) recs.push(...Object.keys(per));
+  const overrides = S('recruiter_targets', {}) || {};
+  const nRec = recs.length || 1;
+  const rows = recs.map(rec => {
+    const gedaan = per[rec] || 0;
+    const doel = overrides[rec] != null ? Number(overrides[rec]) : (tgt ? Math.round(tgt / nRec) : 0);
+    return { rec, gedaan, doel, gelijkVerdeeld: overrides[rec] == null };
+  }).sort((a, b) => b.gedaan - a.gedaan || a.rec.localeCompare(b.rec));
+  return { rows, tgt, maand: mk, somDoel: rows.reduce((s, r) => s + r.doel, 0) };
+}
+
+// ── maand-terugblik: voorspeld (plan) vs. echt behaald ─────────
+function maandTerugblik(n = 6) {
+  const gemFee = kpis().gemFee || 8500;
+  const snaps = D.settings.forecast_snapshots || {};
+  const m0 = monthKey(todayISO());
+  const rows = [];
+  for (let i = 1; i <= n; i++) {
+    const mk = addMonths(m0, -i).slice(0, 7);
+    const trow = D.targets.find(x => x.maand === mk);
+    const target = trow ? Number(trow.aantal) : null;
+    const behaald = D.candidates.filter(c => (c.geplaatst_op || '').slice(0, 7) === mk && !(c.vervangt || '')).length;
+    const gefact = D.installments.filter(x => (x.factuurdatum || '').slice(0, 7) === mk && (x.status === 'gefactureerd' || x.status === 'betaald')).reduce((s, x) => s + +x.bedrag_excl, 0)
+      + D.flex.filter(w => (w.week || '').slice(0, 7) === mk).reduce((s, w) => s + +w.bedrag, 0);
+    const snap = snaps[mk];
+    const voorspeldPl = snap && snap.vpl != null ? snap.vpl : target;      // pijplijn-forecast indien vastgelegd, anders plan
+    const voorspeldOmzet = snap && snap.vp != null ? snap.vp : (target != null ? target * gemFee : null);
+    rows.push({ mk, target, behaald, gefact, voorspeldPl, voorspeldOmzet, uitSnapshot: !!snap });
+  }
+  return rows;
+}
+
+// legt aan het begin van de maand vast wat we verwachtten (voor latere terugblik)
+async function ensureForecastSnapshot() {
+  try {
+    if (!D.settings) return;
+    const mk = todayISO().slice(0, 7);
+    const snaps = { ...(D.settings.forecast_snapshots || {}) };
+    if (snaps[mk]) return;
+    const gemFee = kpis().gemFee || 8500;
+    const ti = targetInfo();
+    snaps[mk] = { tgt: ti.aantalTarget, vpl: +pipelineForecast().verwachtAantal.toFixed(1), vp: Math.round((ti.aantalTarget || 0) * gemFee) };
+    await saveSetting('forecast_snapshots', snaps);
+  } catch (e) { /* auth/offline: volgende keer */ }
+}
+
 // ── wervingskanalen & team (via gekoppelde bord-kandidaten) ────
 function kanaalStats() {
   const per = {};

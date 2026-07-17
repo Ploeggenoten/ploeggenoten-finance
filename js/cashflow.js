@@ -101,9 +101,13 @@ const UITLEG = {
     <p><b>Hoe berekend:</b> per gekoppelde bord-kandidaat het bron-veld × de netto fee van de plaatsing.</p>
     <p><b>Hoe sturen:</b> stop budget in de kanalen die plaatsingen opleveren, niet alleen sollicitanten.</p>` },
   a_team: { t: '👥 Team & snelheid', h: `
-    <p><b>Wat je ziet:</b> omzet per recruiter en de gemiddelde time-to-fill (dagen van instroom tot plaatsing).</p>
-    <p><b>Hoe berekend:</b> per gekoppelde kandidaat de recruiter × netto fee; snelheid = dagen tussen eerste fase en geplaatst.</p>
-    <p><b>Hoe sturen:</b> een korte time-to-fill = meer plaatsingen met dezelfde mensen; hier zie je waar het stokt.</p>` },
+    <p><b>Wat je ziet:</b> per recruiter de voortgang van deze maand vs. een doel, plus omzet YTD en de gemiddelde time-to-fill.</p>
+    <p><b>Hoe berekend:</b> "deze maand" = plaatsingen op het bord met die recruiter; het doel is standaard het maandtarget gelijk verdeeld, maar je kunt het per persoon aanpassen (het onthoudt dat).</p>
+    <p><b>Hoe sturen:</b> zie in één oogopslag wie voor- of achterloopt en verdeel het werk; een korte time-to-fill = meer plaatsingen met dezelfde mensen.</p>` },
+  terugblik: { t: '📅 Terugblik — hoe deden we het', h: `
+    <p><b>Wat je ziet:</b> per afgelopen maand wat je vooraf verwachtte tegenover wat het echt werd — in plaatsingen én omzet.</p>
+    <p><b>Hoe berekend:</b> voorspeld = je plan/target (en zodra vastgelegd, de pijplijn-forecast van dat moment, ◇). Behaald = plaatsingen op het bord. Werkelijk = gefactureerd + flex. Trefzekerheid = werkelijk ÷ voorspeld.</p>
+    <p><b>Hoe sturen:</b> structureel te optimistisch of te voorzichtig? Dan weet je dat je forecast of je target moet bijstellen. De app legt vanaf nu elke maand automatisch vast wat 'ie verwachtte, dus dit wordt steeds scherper.</p>` },
 
   // ── Flex ──
   f_marge: { t: '📈 Wekelijkse flex-marge', h: `
@@ -341,6 +345,30 @@ function cfTabelHtml(sc) {
       <p class="muted mt">Facturen incl. btw, op verwachte betaaldatum (geplande factuurdatum + betaaltermijn). Te late betalingen: aanname binnen 2 weken. Btw-afdracht per kwartaal, minus geschatte voorbelasting (${eur(S('voorbelasting_pm', 0))}/mnd — instelbaar).</p>`;
 }
 
+// ── maand-terugblik: voorspeld (plan) vs. echt behaald ─────────
+function cfTerugblikHtml() {
+  const rows = maandTerugblik(6).filter(r => r.target != null || r.behaald > 0 || r.gefact > 0);
+  if (!rows.length) return `<h2>📅 Terugblik — hoe deden we het ${uitlegChip('terugblik')}</h2>
+    <div class="empty">Nog geen afgeronde maanden om op terug te blikken. Vanaf nu legt de app elke maand vast wat we verwachtten.</div>`;
+  const body = rows.map(r => {
+    const hit = r.target != null && r.behaald >= r.target;
+    const treff = r.voorspeldOmzet ? r.gefact / r.voorspeldOmzet : null;
+    return `<tr>
+      <td>${esc(fmtMaand(r.mk + '-01'))}</td>
+      <td class="num">${r.voorspeldPl != null ? r.voorspeldPl : '—'}${r.uitSnapshot ? ' <span class="muted" title="pijplijn-forecast vastgelegd">◇</span>' : ''}</td>
+      <td class="num"><b style="color:${hit ? 'var(--green)' : r.target != null ? 'var(--amber)' : 'var(--txt)'}">${r.behaald}</b></td>
+      <td class="num muted">${r.voorspeldOmzet != null ? eur(r.voorspeldOmzet) : '—'}</td>
+      <td class="num"><b>${eur(r.gefact)}</b></td>
+      <td class="num">${treff != null ? `<span style="color:${treff >= .9 ? 'var(--green)' : treff >= .6 ? 'var(--amber)' : 'var(--red)'}">${Math.round(treff * 100)}%</span>` : '—'}</td></tr>`;
+  }).join('');
+  return `<h2>📅 Terugblik — hoe deden we het ${uitlegChip('terugblik')}</h2>
+    <table>
+      <tr><th>Maand</th><th class="num">Voorspeld pl.</th><th class="num">Behaald pl.</th><th class="num">Voorspelde omzet</th><th class="num">Werkelijk gefact.</th><th class="num">Trefzekerheid</th></tr>
+      ${body}
+    </table>
+    <p class="muted mt">Voorspeld = je plan/target voor die maand${rows.some(r => r.uitSnapshot) ? ' (◇ = vastgelegde pijplijn-forecast)' : ''}. Behaald = plaatsingen op het bord in die maand. Werkelijk = gefactureerd + flex. Trefzekerheid = werkelijk ÷ voorspelde omzet.</p>`;
+}
+
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
@@ -435,7 +463,11 @@ function renderCashflow(root) {
         : 'Kans per fase (instelbaar): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Zodra het bord genoeg fase-historie heeft, kalibreert dit automatisch op je eigen cijfers.'} Gewogen = kans × gem. fee. Na de bord-horizon rekent de projectie met het target-tempo.</p>`
       : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
 
-    <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>`;
+    <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>
+
+    <div class="panel table-wrap mt">${cfTerugblikHtml()}</div>`;
+
+  ensureForecastSnapshot();
 
   // schuiven: alleen de dynamische delen verversen, niet de schuiven zelf
   const upd = () => {
