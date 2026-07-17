@@ -342,37 +342,45 @@ const FASE_KANSEN_DEFAULT = {
   'Voorgesteld': .10, 'Voorselectie': .10, 'O&O sessie': .25,
   'Eerste gesprek': .20, 'Tweede gesprek': .35, 'Meeloopdag': .50,
   'In de wacht': .60,            // goede kandidaten, wachten op startmoment/contractruimte
-  'Contract ondertekenen': .80,
+  'Offer': .70,                  // aanbod gedaan
+  'Contract ondertekenen': .85,  // vanaf hier telt het als plaatsing
 };
 // verwachte weken tot plaatsing per fase (voor timing van de cash)
 const FASE_LEAD_WKN = {
   'Voorgesteld': 8, 'Voorselectie': 8, 'O&O sessie': 6,
   'Eerste gesprek': 6, 'Tweede gesprek': 5, 'Meeloopdag': 4,
   'In de wacht': 8,              // zonder startdatum: ruime aanname; mét startdatum telt die
-  'Contract ondertekenen': 2,
+  'Offer': 3, 'Contract ondertekenen': 2,
 };
 
 // ── fase-kansen kalibreren op de ECHTE doorstroom (bord-historie) ──
 // De volgorde van de funnel; index bepaalt "hoe ver een kandidaat kwam".
+// LET OP: "In de wacht" staat vóór "Offer" (logische volgorde: eerst parkeren, dan aanbod).
 const FUNNEL = ['Voorselectie', 'Voorgesteld', 'O&O sessie', 'Eerste gesprek', 'Tweede gesprek',
-  'Meeloopdag', 'Offer', 'In de wacht', 'Contract ondertekenen', 'Contract getekend', 'Gestart'];
-const GETEKEND_IDX = FUNNEL.indexOf('Contract getekend');
+  'Meeloopdag', 'In de wacht', 'Offer', 'Contract ondertekenen', 'Contract getekend', 'Gestart'];
+// Een plaatsing telt PAS vanaf "Contract ondertekenen" — alles daarvoor is nog pijplijn.
+const PLAATSING_IDX = FUNNEL.indexOf('Contract ondertekenen');
 
 function furthestIdx(c) {
   let idx = FUNNEL.indexOf(c.fase);
   if (Array.isArray(c.historie)) for (const h of c.historie) { const i = FUNNEL.indexOf(h && h.fase); if (i > idx) idx = i; }
-  if (c.geplaatst_op && idx < GETEKEND_IDX) idx = GETEKEND_IDX;
+  if (c.geplaatst_op && idx < PLAATSING_IDX) idx = PLAATSING_IDX;
   return idx;
 }
-const isResolvedCand = c => ['Contract getekend', 'Gestart', 'Afgevallen', 'Gestopt'].includes(c.fase) || !!c.geplaatst_op;
-const reachedPlacement = c => !!c.geplaatst_op || furthestIdx(c) >= GETEKEND_IDX;
+const isResolvedCand = c => ['Contract ondertekenen', 'Contract getekend', 'Gestart', 'Afgevallen', 'Gestopt'].includes(c.fase) || !!c.geplaatst_op;
+const reachedPlacement = c => !!c.geplaatst_op || furthestIdx(c) >= PLAATSING_IDX;
 
 // per fase: welk deel van wie die fase ooit bereikte, werd uiteindelijk een plaatsing?
-// alleen kandidaten waarvan we het pad kennen (historie of huidige funnelfase) en die "af" zijn.
-function faseConversie(minN = 6) {
+// Alleen betrouwbaar als een groot deel van de afgeronde kandidaten fase-historie heeft
+// (anders vallen vroege afvallers uit de noemer en worden de kansen véél te hoog).
+function faseConversie(minN = 15) {
   const kans = {}, meta = {};
-  const usable = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') &&
-    isResolvedCand(c) && furthestIdx(c) >= 0);
+  const resolved = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') && isResolvedCand(c));
+  const metHist = resolved.filter(c => Array.isArray(c.historie) && c.historie.length > 0);
+  const coverage = resolved.length ? metHist.length / resolved.length : 0;
+  if (coverage < 0.6) return { kans, meta, coverage };   // te weinig historie → gebruik de standaardkansen
+  // alleen kandidaten met bekend pad (historie of daadwerkelijk geplaatst) tellen mee
+  const usable = resolved.filter(c => (Array.isArray(c.historie) && c.historie.length > 0) || c.geplaatst_op);
   for (const fase of Object.keys(FASE_KANSEN_DEFAULT)) {
     const p = FUNNEL.indexOf(fase); if (p < 0) continue;
     const bereikt = usable.filter(c => furthestIdx(c) >= p);
@@ -382,7 +390,7 @@ function faseConversie(minN = 6) {
       meta[fase] = { n: bereikt.length, geplaatst };
     }
   }
-  return { kans, meta };
+  return { kans, meta, coverage };
 }
 
 // ── break-even: hoeveel plaatsingen/maand dekken je kosten? ─────
@@ -403,6 +411,7 @@ function pipelineForecast() {
   const emp = faseConversie();
   const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, emp.kans, S('fase_kansen', {}) || {});
   const fee = kpis().gemFee || 8500;
+  const behoud = 1 - (kpis().stopPct || 0);                   // blijfkans: kans dat een plaatsing niet weer stopt (uitval)
   const t = todayISO();
   const linked = new Set(D.placements.map(p => p.pipeline_candidate_id).filter(Boolean));
   const rows = D.candidates.filter(c =>
@@ -413,10 +422,12 @@ function pipelineForecast() {
       // plaatsing verwacht op bord-startdatum, anders fase-afhankelijke doorlooptijd
       const plaatsing = (c.start && c.start > t) ? c.start : addDays(t, (FASE_LEAD_WKN[c.fase] || 6) * 7);
       const cash = monthKey(addDays(plaatsing, 30));   // factuur + betaaltermijn ≈ 1 mnd later
-      return { c, kans, fee, gewogen: fee * kans, plaatsing, cashMaand: cash };
+      // bruto = kans × fee (kans dat 'ie een plaatsing wordt); netto = óók na verwachte uitval
+      return { c, kans, fee, gewogen: fee * kans, netto: fee * kans * behoud, plaatsing, cashMaand: cash };
     })
     .sort((a, b) => b.kans - a.kans);
   const totaal = rows.reduce((s, r) => s + r.gewogen, 0);
+  const totaalNetto = rows.reduce((s, r) => s + r.netto, 0);
   const perMaand = {}, perMaandAantal = {}, perMaandPlaatsMaand = {};
   for (const r of rows) {
     perMaand[r.cashMaand] = (perMaand[r.cashMaand] || 0) + r.gewogen;
@@ -426,7 +437,7 @@ function pipelineForecast() {
   }
   // verwacht aantal plaatsingen = som van de kansen (gewogen koppen)
   const verwachtAantal = rows.reduce((s, r) => s + r.kans, 0);
-  return { rows, totaal, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal, kalibratie: emp.meta };
+  return { rows, totaal, totaalNetto, behoud, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal, kalibratie: emp.meta, coverage: emp.coverage };
 }
 
 // ── plaatsingen exact zoals het bord ze telt ───────────────────

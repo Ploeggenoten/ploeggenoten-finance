@@ -53,8 +53,8 @@ const UITLEG = {
     <p><b>Hoe berekend:</b> hoofdsom − afgelost = nog open. Geplande aflossingen tellen mee in de projectie zolang "aflossingen meenemen" aan staat.</p>
     <p><b>Hoe sturen:</b> vink aflossingen aan/uit om te zien wat een extra aflossing met je saldo en runway doet.</p>` },
   pijplijn: { t: '🔮 Wat zit er in de pijplijn', h: `
-    <p><b>Wat je ziet:</b> wat er nú op het bord staat, vertaald naar verwachte plaatsingen én euro's.</p>
-    <p><b>Hoe berekend:</b> per kandidaat kans-per-fase × gemiddelde fee. "Gewogen koppen" = de som van alle kansen. Getoetst tegen je target-tempo.</p>
+    <p><b>Wat je ziet:</b> wat er nú op het bord staat, vertaald naar verwachte plaatsingen én euro's. Een kandidaat telt pas als plaatsing vanaf de fase "Contract ondertekenen" — alles daarvoor is nog onzekere pijplijn.</p>
+    <p><b>Hoe berekend:</b> per kandidaat kans-per-fase × gemiddelde fee = <b>bruto gewogen</b>. Daar gaat nog een verwachte uitval vanaf (blijfkans) → <b>netto</b>. De cashflow-projectie rekent met netto, zodat je nooit te rooskleurig plant. De kansen zijn standaard laag en kalibreren zich pas op je eigen doorstroom als het bord genoeg fase-historie heeft.</p>
     <p><b>Hoe sturen:</b> te weinig gewogen in beeld? Dan is de boodschap "bovenaan de funnel bijvullen" — anders val je over ~2 maanden terug.</p>` },
   breakeven: { t: '⚖️ Break-even', h: `
     <p><b>Wat je ziet:</b> hoeveel plaatsingen per maand je nodig hebt om je kosten te dekken. Elke plaatsing daarboven is winst.</p>
@@ -449,18 +449,18 @@ function renderCashflow(root) {
     </div>
 
     <div class="panel mb"><div class="spread mb"><h2>🔮 Wat zit er in de pijplijn <span class="muted">— live van het bord</span> ${uitlegChip('pijplijn')}</h2>
-      <span class="muted">gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> plaatsingen · <b>${eur(pf.totaal)}</b> excl. btw</span></div>
+      <span class="muted">gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> plaatsingen · bruto <b>${eur(pf.totaal)}</b> → netto <b style="color:var(--accent)">${eur(pf.totaalNetto)}</b> excl. btw</span></div>
       ${pf.rows.length ? `
       <div class="mb">Verwachte plaatsingen per maand (gewogen koppen): ${plChips || '—'}
         <p class="muted mt">Om <b>${behoefte}</b> plaatsing${behoefte === 1 ? '' : 'en'} per maand te halen, moet de pijplijn dat tempo blijven voeden. Nu staat er gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> op de rol voor de komende ~2 maanden — ${pf.verwachtAantal >= behoefte ? '<b style="color:var(--green)">genoeg om het tempo vast te houden</b>' : `<b style="color:var(--amber)">${(behoefte - pf.verwachtAantal).toFixed(1)} te weinig</b> — er moet bovenaan de funnel bij`}.</p></div>
       <div class="table-wrap"><table>
-      <tr><th>Kandidaat</th><th>Klant</th><th>Fase</th><th class="num">Kans</th><th class="num">Fee (gem.)</th><th class="num">Gewogen</th><th>Cash verwacht</th></tr>
+      <tr><th>Kandidaat</th><th>Klant</th><th>Fase</th><th class="num">Kans</th><th class="num">Fee (gem.)</th><th class="num">Bruto gewogen</th><th class="num">Netto (na uitval)</th><th>Cash verwacht</th></tr>
       ${pf.rows.map(r => `<tr><td>${esc(r.c.naam)}</td><td>${esc(r.c.klant || '')}</td><td>${tag(r.c.fase, r.kans >= .5 ? 'green' : r.kans >= .25 ? 'amber' : 'gray')}</td>
-        <td class="num">${Math.round(r.kans * 100)}%</td><td class="num">${eur(r.fee)}</td><td class="num"><b>${eur(r.gewogen)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
+        <td class="num">${Math.round(r.kans * 100)}%</td><td class="num">${eur(r.fee)}</td><td class="num muted">${eur(r.gewogen)}</td><td class="num"><b>${eur(r.netto)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
       </table></div>
       <p class="muted mt">${Object.keys(pf.kalibratie || {}).length
         ? `Kansen <b>gekalibreerd op je eigen doorstroom</b> waar genoeg data is: ${Object.entries(pf.kalibratie).map(([f, m]) => `${esc(f)} ${Math.round(m.geplaatst / m.n * 100)}% (n=${m.n})`).join(' · ')}. Overige fases: standaardaanname.`
-        : 'Kans per fase (instelbaar): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Zodra het bord genoeg fase-historie heeft, kalibreert dit automatisch op je eigen cijfers.'} Gewogen = kans × gem. fee. Na de bord-horizon rekent de projectie met het target-tempo.</p>`
+        : `Kans per fase (standaard, instelbaar): voorselectie 10% · O&O 25% · gesprek 20–35% · meeloopdag 50% · in de wacht 60% · offer 70% · ondertekenen 85%. Kalibratie op je eigen cijfers start zodra ~60% van de afgeronde kandidaten fase-historie heeft (nu ${Math.round((pf.coverage || 0) * 100)}%).`} <b>Bruto</b> = kans × gem. fee. <b>Netto</b> = óók na verwachte uitval (blijfkans ${Math.round(pf.behoud * 100)}%). De projectie rekent met netto. Een plaatsing telt pas vanaf "Contract ondertekenen".</p>`
       : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
 
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>
