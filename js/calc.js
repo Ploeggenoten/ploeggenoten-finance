@@ -358,8 +358,8 @@ const FASE_LEAD_WKN = {
 // LET OP: "In de wacht" staat vóór "Offer" (logische volgorde: eerst parkeren, dan aanbod).
 const FUNNEL = ['Voorselectie', 'Voorgesteld', 'O&O sessie', 'Eerste gesprek', 'Tweede gesprek',
   'Meeloopdag', 'In de wacht', 'Offer', 'Contract ondertekenen', 'Contract getekend', 'Gestart'];
-// Een plaatsing telt PAS vanaf "Contract ondertekenen" — alles daarvoor is nog pijplijn.
-const PLAATSING_IDX = FUNNEL.indexOf('Contract ondertekenen');
+// Een plaatsing telt PAS vanaf "Contract getekend" — alles daarvoor (óók "Contract ondertekenen") is nog pijplijn.
+const PLAATSING_IDX = FUNNEL.indexOf('Contract getekend');
 
 function furthestIdx(c) {
   let idx = FUNNEL.indexOf(c.fase);
@@ -367,7 +367,7 @@ function furthestIdx(c) {
   if (c.geplaatst_op && idx < PLAATSING_IDX) idx = PLAATSING_IDX;
   return idx;
 }
-const isResolvedCand = c => ['Contract ondertekenen', 'Contract getekend', 'Gestart', 'Afgevallen', 'Gestopt'].includes(c.fase) || !!c.geplaatst_op;
+const isResolvedCand = c => ['Contract getekend', 'Gestart', 'Afgevallen', 'Gestopt'].includes(c.fase) || !!c.geplaatst_op;
 const reachedPlacement = c => !!c.geplaatst_op || furthestIdx(c) >= PLAATSING_IDX;
 
 // per fase: welk deel van wie die fase ooit bereikte, werd uiteindelijk een plaatsing?
