@@ -28,7 +28,8 @@ function renderFlex(root) {
 
   root.innerHTML = `
     <div class="spread mb"><h1>Flex · via Pronkert</h1>
-      <button class="btn primary" id="fxNieuw">+ Week invoeren</button></div>
+      <div class="row"><button class="btn" id="fxPdf">📄 Margefactuur (PDF)</button>
+      <button class="btn primary" id="fxNieuw">+ Week invoeren</button></div></div>
 
     <div class="grid cols-4 mb">
       <div class="kpi"><div class="lbl">Laatste week${fx.laatste ? ' · ' + fmtD(fx.laatste.week) : ''}</div>
@@ -54,6 +55,7 @@ function renderFlex(root) {
       <p class="muted mt">Vul het uitgekeerde bedrag excl. btw in. De cashflow-projectie rekent met het gemiddelde van je laatste 4 weken; op Cashflow kun je met de flex-schuif spelen (groei of wegval).</p></div>`;
 
   $('#fxNieuw').onclick = () => openFlexModal();
+  $('#fxPdf').onclick = () => openFlexPdfImport();
   $('#fpNieuw') && ($('#fpNieuw').onclick = () => openFlexPlModal());
   root.addEventListener('click', e => {
     const ed = e.target.closest('[data-fedit]');
@@ -226,5 +228,133 @@ function openFlexModal(w = null) {
     await dbWrite('fin_flex_weken', t => w ? t.update(row).eq('id', w.id) : t.upsert(row, { onConflict: 'week' }));
     await reload('fin_flex_weken', 'flex', 'week');
     closeModal(); toast('Flex-week opgeslagen ✓'); rerender();
+  };
+}
+
+// ── margefactuur-PDF van Pronkert importeren ───────────────────
+// Wekelijkse creditfactuur: per flexkracht per dag de marge; onderaan totaal excl. btw.
+function maandagVanIsoWeek(jaar, week) {
+  const j4 = new Date(Date.UTC(jaar, 0, 4));
+  const dow = (j4.getUTCDay() + 6) % 7;                   // ma=0
+  const ma1 = new Date(j4); ma1.setUTCDate(j4.getUTCDate() - dow + (week - 1) * 7);
+  return ma1.toISOString().slice(0, 10);
+}
+
+let _pdfjsPromise = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (_pdfjsPromise) return _pdfjsPromise;
+  _pdfjsPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js';
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+      res(window.pdfjsLib);
+    };
+    s.onerror = () => rej(new Error('pdf.js laden mislukt (offline?)'));
+    document.head.appendChild(s);
+  });
+  return _pdfjsPromise;
+}
+
+async function pdfTekst(arrayBuffer) {
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({ data: arrayBuffer }).promise;
+  let tekst = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const pg = await doc.getPage(i);
+    const tc = await pg.getTextContent();
+    tekst += tc.items.map(x => x.str).join(' ') + '\n';
+  }
+  return tekst;
+}
+
+function parseMargeFactuur(tekst) {
+  const t = tekst.replace(/\s+/g, ' ');
+  const nr = (t.match(/Factuurnummer:?\s*(\d{4,})/) || [])[1] || null;
+  const wkM = t.match(/Week\s+(\d{1,2})-(\d{4})/);
+  const week = wkM ? maandagVanIsoWeek(+wkM[2], +wkM[1]) : null;
+  // totaal excl. btw staat het betrouwbaarst in de btw-regel: "21,00% BTW over € -800,37"
+  const exM = t.match(/BTW\s+over\s*€?\s*-?\s*([\d.]+,\d{2})/);
+  const bedrag = exM ? Number(exM[1].replace(/\./g, '').replace(',', '.')) : null;
+  // flexkrachten: "S. van Nicolaas (Sven), Reg.nr. 7653911, Logistiek medewerker"
+  const krachten = [];
+  const re = /\(([^)]{1,30})\)\s*,?\s*Reg\.?\s*nr\.?\s*(\d+)\s*,\s*([A-Za-zÀ-ž /-]{2,40}?)(?=\s+Week\b|\s*$)/g;
+  const marks = [];
+  let m;
+  while ((m = re.exec(t))) marks.push({ roepnaam: m[1].trim(), reg: m[2], functie: m[3].trim(), idx: m.index });
+  marks.forEach((mk, i) => {
+    const seg = t.slice(mk.idx, marks[i + 1] ? marks[i + 1].idx : t.length);
+    let uren = 0;
+    const ur = /Loon\s+(?:normale\s+uren|overwerkuren):\s*(\d+):(\d{2})/g;
+    let u; while ((u = ur.exec(seg))) uren += (+u[1]) + (+u[2]) / 60;
+    // volledige naam: stukje vóór de haakjes ("S. van Nicolaas")
+    const voor = t.slice(Math.max(0, mk.idx - 45), mk.idx);
+    const naamM = voor.match(/([A-ZÀ-Ž][\w.]*\.?\s+(?:[a-zà-ž]+\s+)*[A-ZÀ-Ž][\wà-ž-]+)\s*$/);
+    const bestaand = krachten.find(k => k.reg === mk.reg);
+    if (bestaand) bestaand.uren += uren;
+    else krachten.push({ reg: mk.reg, roepnaam: mk.roepnaam, naam: naamM ? naamM[1] : mk.roepnaam, functie: mk.functie, uren: +uren.toFixed(2) });
+  });
+  krachten.forEach(k => { k.uren = +k.uren.toFixed(2); });
+  return { nr, week, bedrag, krachten, geldig: !!(week && bedrag != null) };
+}
+
+// koppel een factuur-flexkracht aan een fin_flex_plaatsingen-rij (roepnaam of achternaam)
+function matchFlexPl(k) {
+  const lc = s => (s || '').toLowerCase();
+  const achternaam = lc(k.naam).split(' ').pop();
+  return D.flexPl.find(f => {
+    const kand = lc(f.kandidaat);
+    return kand.includes(lc(k.roepnaam)) || (achternaam.length > 3 && kand.includes(achternaam));
+  }) || null;
+}
+
+function openFlexPdfImport() {
+  openModal(`
+    <div class="modal-head"><h2>📄 Margefactuur importeren</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+    <p class="muted mb">Sleep of kies de wekelijkse marge-factuur (PDF) van Pronkert. De week, het bedrag en de gewerkte uren per flexkracht worden automatisch herkend.</p>
+    <input type="file" id="fxpdfFile" accept=".pdf,application/pdf">
+    <div id="fxpdfPrev" class="mt"></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Sluiten</button>
+    <button class="btn primary" id="fxpdfGo" disabled>Importeren</button></div>`);
+  let parsed = null;
+  $('#fxpdfFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    $('#fxpdfPrev').innerHTML = '<span class="muted">Lezen…</span>';
+    try {
+      parsed = parseMargeFactuur(await pdfTekst(await f.arrayBuffer()));
+    } catch (err) { $('#fxpdfPrev').innerHTML = `<div class="tag red">Lezen mislukt: ${esc(err.message)}</div>`; return; }
+    if (!parsed.geldig) { $('#fxpdfPrev').innerHTML = '<div class="tag red">Kon week of bedrag niet vinden — is dit de marge-factuur van Pronkert?</div>'; return; }
+    const bestaand = D.flex.find(w => w.week === parsed.week);
+    const alGedaan = bestaand && (bestaand.note || '').includes(parsed.nr || '§');
+    $('#fxpdfPrev').innerHTML = `
+      <div class="pot"><span>Week</span><b>${fmtD(parsed.week)} (ma)</b></div>
+      <div class="pot"><span>Marge excl. btw</span><b>${eur2(parsed.bedrag)}</b></div>
+      <div class="pot"><span>Factuurnummer</span><b>${esc(parsed.nr || '—')}</b></div>
+      <div class="pot"><span>Flexkrachten</span><b>${parsed.krachten.length}</b></div>
+      ${parsed.krachten.map(k => { const f = matchFlexPl(k); return `<div class="pot"><span>· ${esc(k.naam)} (${esc(k.roepnaam)}) — ${k.uren} uur</span><b>${f ? '→ ' + esc(f.kandidaat) : '<span class="muted">geen koppeling</span>'}</b></div>`; }).join('')}
+      ${parsed.krachten.some(k => matchFlexPl(k)) ? `<label class="mt" style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px"><input type="checkbox" id="fxpdfUren" checked style="width:auto"> Gewerkte uren bijtellen bij de gekoppelde flexkrachten (overname-teller)</label>` : ''}
+      ${alGedaan ? '<div class="tag amber mt">⚠ Deze factuur is al geïmporteerd — nogmaals importeren overschrijft alleen het weekbedrag (uren tellen niet dubbel).</div>'
+        : bestaand ? '<div class="tag amber mt">Er staat al een bedrag voor deze week — dat wordt overschreven.</div>' : ''}`;
+    $('#fxpdfGo').disabled = false;
+  };
+  $('#fxpdfGo').onclick = async () => {
+    if (!parsed || !parsed.geldig) return;
+    const bestaand = D.flex.find(w => w.week === parsed.week);
+    const alGedaan = bestaand && (bestaand.note || '').includes(parsed.nr || '§');
+    const row = { week: parsed.week, bedrag: parsed.bedrag, flexkrachten: parsed.krachten.length, note: `PDF factuur ${parsed.nr || '?'}` };
+    await dbWrite('fin_flex_weken', t => t.upsert(row, { onConflict: 'week' }));
+    await reload('fin_flex_weken', 'flex', 'week');
+    // uren bijtellen (alleen bij eerste import van deze factuur, tegen dubbeltellen)
+    const doUren = $('#fxpdfUren') && $('#fxpdfUren').checked && !alGedaan;
+    let nUren = 0;
+    if (doUren) for (const k of parsed.krachten) {
+      const f = matchFlexPl(k); if (!f || !k.uren) continue;
+      await dbWrite('fin_flex_plaatsingen', t => t.update({ gewerkte_uren: (Number(f.gewerkte_uren) || 0) + k.uren }).eq('id', f.id));
+      nUren++;
+    }
+    if (nUren) await reload('fin_flex_plaatsingen', 'flexPl', 'id');
+    closeModal(); toast(`Week ${fmtD(parsed.week)} geïmporteerd ✓ (${eur(parsed.bedrag)}${nUren ? ` · uren bijgewerkt voor ${nUren} flexkracht${nUren === 1 ? '' : 'en'}` : ''})`);
+    rerender();
   };
 }
