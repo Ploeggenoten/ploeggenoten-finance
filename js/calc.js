@@ -339,11 +339,13 @@ async function autoStopFromBoard() {
 // ── gewogen pijplijn-forecast ──────────────────────────────────
 // Kans per bordfase dat het een plaatsing wordt (instelbaar via setting 'fase_kansen')
 const FASE_KANSEN_DEFAULT = {
-  'Voorgesteld': .10, 'Voorselectie': .10, 'O&O sessie': .25,
-  'Eerste gesprek': .20, 'Tweede gesprek': .35, 'Meeloopdag': .50,
-  'In de wacht': .60,            // goede kandidaten, wachten op startmoment/contractruimte
-  'Offer': .70,                  // aanbod gedaan
-  'Contract ondertekenen': .85,  // vanaf hier telt het als plaatsing
+  // Voorselectie telt bewust NIET mee (te vroeg om te wegen)
+  'Voorgesteld': .05,
+  'O&O sessie': .10,             // niet expliciet opgegeven — geïnterpoleerd tussen voorgesteld en 1e gesprek
+  'Eerste gesprek': .20, 'Tweede gesprek': .40, 'Meeloopdag': .50,
+  'In de wacht': .50,            // goede kandidaten, wachten op startmoment/contractruimte
+  'Offer': .65,                  // niet expliciet opgegeven — geïnterpoleerd tussen in-de-wacht en ondertekenen
+  'Contract ondertekenen': .75,  // pijplijn; een plaatsing telt pas vanaf "Contract getekend"
 };
 // verwachte weken tot plaatsing per fase (voor timing van de cash)
 const FASE_LEAD_WKN = {
@@ -408,10 +410,10 @@ function breakEven() {
 }
 
 function pipelineForecast() {
-  const emp = faseConversie();
-  const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, emp.kans, S('fase_kansen', {}) || {});
+  // Fase-kansen zijn vast (door Tjeerd ingesteld); alleen de UITVAL (blijfkans) leert de app zelf.
+  const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, S('fase_kansen', {}) || {});
   const fee = kpis().gemFee || 8500;
-  const behoud = 1 - (kpis().stopPct || 0);                   // blijfkans: kans dat een plaatsing niet weer stopt (uitval)
+  const behoud = 1 - (kpis().stopPct || 0);                   // blijfkans: geleerd uit je eigen stops (uitval)
   const t = todayISO();
   const linked = new Set(D.placements.map(p => p.pipeline_candidate_id).filter(Boolean));
   const rows = D.candidates.filter(c =>
@@ -437,7 +439,7 @@ function pipelineForecast() {
   }
   // verwacht aantal plaatsingen = som van de kansen (gewogen koppen)
   const verwachtAantal = rows.reduce((s, r) => s + r.kans, 0);
-  return { rows, totaal, totaalNetto, behoud, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal, kalibratie: emp.meta, coverage: emp.coverage };
+  return { rows, totaal, totaalNetto, behoud, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal };
 }
 
 // ── plaatsingen exact zoals het bord ze telt ───────────────────
