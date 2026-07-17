@@ -456,8 +456,11 @@ function pipelineForecast() {
       // plaatsing verwacht op bord-startdatum, anders fase-afhankelijke doorlooptijd
       const plaatsing = (c.start && c.start > t) ? c.start : addDays(t, (FASE_LEAD_WKN[c.fase] || 6) * 7);
       const cash = monthKey(addDays(plaatsing, 30));   // factuur + betaaltermijn ≈ 1 mnd later
+      // fee: échte berekening (maandloon × jaarfactor × klanttarief) waar het bord een loon heeft, anders gemiddelde
+      const fb = c.maandloon ? feeBerekening(c) : null;
+      const cFee = fb ? fb.fee : fee;
       // bruto = kans × fee (kans dat 'ie een plaatsing wordt); netto = óók na verwachte uitval
-      return { c, kans, fee, gewogen: fee * kans, netto: fee * kans * behoud, plaatsing, cashMaand: cash };
+      return { c, kans, fee: cFee, feeEcht: !!fb, gewogen: cFee * kans, netto: cFee * kans * behoud, plaatsing, cashMaand: cash };
     })
     .sort((a, b) => b.kans - a.kans);
   const totaal = rows.reduce((s, r) => s + r.gewogen, 0);
