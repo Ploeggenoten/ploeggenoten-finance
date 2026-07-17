@@ -99,6 +99,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const b = e.target.closest('.nav-btn');
     if (b) switchView(b.dataset.view);
   });
+  // klikbare uitleg-chips werken overal (elke tab), via één handler
+  document.addEventListener('click', e => {
+    const u = e.target.closest('[data-uitleg]');
+    if (u && typeof openUitleg === 'function') openUitleg(u.dataset.uitleg);
+  });
   $('#logoutBtn').onclick = async () => { await sb.auth.signOut(); location.reload(); };
 
   const doLogin = async () => {

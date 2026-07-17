@@ -243,7 +243,7 @@ function renderAdvies(root) {
   root.innerHTML = `
     <h1>Advies · je financieel adviseur</h1>
     <div class="muted mb">Live berekend uit je eigen cijfers, met branchenormen voor werving & selectie + flex. Elke kaart: wat er speelt, waarom het telt, en wat een adviseur zou doen.</div>
-    <div class="panel mb"><h2>📐 De cijfers die een adviseur checkt</h2>
+    <div class="panel mb"><h2>📐 De cijfers die een adviseur checkt ${uitlegChip('a_cijfers')}</h2>
       <div class="table-wrap"><table>
       ${cijfers.map(([l, v, s]) => `<tr><td>${esc(l)}</td><td class="num"><b>${esc(v)}</b></td><td class="muted">${esc(s)}</td></tr>`).join('')}
       </table></div></div>
@@ -251,7 +251,7 @@ function renderAdvies(root) {
     ${sectie('kans', '🟡 Kansen')}
     ${sectie('sterkte', '🟢 Sterktes')}
     <div class="grid cols-2">
-      <div class="panel"><h2>📣 Wervingskanalen</h2>${kanaalHtml}</div>
-      <div class="panel"><h2>👥 Team & snelheid</h2>${teamHtml}</div>
+      <div class="panel"><h2>📣 Wervingskanalen ${uitlegChip('a_kanaal')}</h2>${kanaalHtml}</div>
+      <div class="panel"><h2>👥 Team & snelheid ${uitlegChip('a_team')}</h2>${teamHtml}</div>
     </div>`;
 }

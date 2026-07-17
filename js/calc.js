@@ -352,8 +352,56 @@ const FASE_LEAD_WKN = {
   'Contract ondertekenen': 2,
 };
 
+// ── fase-kansen kalibreren op de ECHTE doorstroom (bord-historie) ──
+// De volgorde van de funnel; index bepaalt "hoe ver een kandidaat kwam".
+const FUNNEL = ['Voorselectie', 'Voorgesteld', 'O&O sessie', 'Eerste gesprek', 'Tweede gesprek',
+  'Meeloopdag', 'Offer', 'In de wacht', 'Contract ondertekenen', 'Contract getekend', 'Gestart'];
+const GETEKEND_IDX = FUNNEL.indexOf('Contract getekend');
+
+function furthestIdx(c) {
+  let idx = FUNNEL.indexOf(c.fase);
+  if (Array.isArray(c.historie)) for (const h of c.historie) { const i = FUNNEL.indexOf(h && h.fase); if (i > idx) idx = i; }
+  if (c.geplaatst_op && idx < GETEKEND_IDX) idx = GETEKEND_IDX;
+  return idx;
+}
+const isResolvedCand = c => ['Contract getekend', 'Gestart', 'Afgevallen', 'Gestopt'].includes(c.fase) || !!c.geplaatst_op;
+const reachedPlacement = c => !!c.geplaatst_op || furthestIdx(c) >= GETEKEND_IDX;
+
+// per fase: welk deel van wie die fase ooit bereikte, werd uiteindelijk een plaatsing?
+// alleen kandidaten waarvan we het pad kennen (historie of huidige funnelfase) en die "af" zijn.
+function faseConversie(minN = 6) {
+  const kans = {}, meta = {};
+  const usable = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') &&
+    isResolvedCand(c) && furthestIdx(c) >= 0);
+  for (const fase of Object.keys(FASE_KANSEN_DEFAULT)) {
+    const p = FUNNEL.indexOf(fase); if (p < 0) continue;
+    const bereikt = usable.filter(c => furthestIdx(c) >= p);
+    if (bereikt.length >= minN) {
+      const geplaatst = bereikt.filter(reachedPlacement).length;
+      kans[fase] = geplaatst / bereikt.length;
+      meta[fase] = { n: bereikt.length, geplaatst };
+    }
+  }
+  return { kans, meta };
+}
+
+// ── break-even: hoeveel plaatsingen/maand dekken je kosten? ─────
+function breakEven() {
+  const gemFee = kpis().gemFee || 8500;
+  const behoud = 1 - (kpis().stopPct || 0);
+  const m0 = monthKey(todayISO());
+  let kost = 0, n = 0;
+  for (let i = 0; i < 12; i++) { const k = addMonths(m0, i); kost += (actueelVoorMaand(k) ?? budgetVoorMaand(k)); n++; }
+  const kostPm = n ? kost / n : 0;
+  const flexPm = flexStats().maandRunRate;
+  const perPlaatsing = gemFee * behoud;                 // netto W&S-omzet per plaatsing (excl. btw)
+  const nodig = perPlaatsing > 0 ? Math.max(0, (kostPm - flexPm) / perPlaatsing) : null;
+  return { kostPm, flexPm, perPlaatsing, gemFee, behoud, nodig };
+}
+
 function pipelineForecast() {
-  const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, S('fase_kansen', {}) || {});
+  const emp = faseConversie();
+  const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, emp.kans, S('fase_kansen', {}) || {});
   const fee = kpis().gemFee || 8500;
   const t = todayISO();
   const linked = new Set(D.placements.map(p => p.pipeline_candidate_id).filter(Boolean));
@@ -378,7 +426,7 @@ function pipelineForecast() {
   }
   // verwacht aantal plaatsingen = som van de kansen (gewogen koppen)
   const verwachtAantal = rows.reduce((s, r) => s + r.kans, 0);
-  return { rows, totaal, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal };
+  return { rows, totaal, perMaand, perMaandAantal, perMaandPlaatsMaand, verwachtAantal, kalibratie: emp.meta };
 }
 
 // ── plaatsingen exact zoals het bord ze telt ───────────────────

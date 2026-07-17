@@ -56,10 +56,78 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> wat er nú op het bord staat, vertaald naar verwachte plaatsingen én euro's.</p>
     <p><b>Hoe berekend:</b> per kandidaat kans-per-fase × gemiddelde fee. "Gewogen koppen" = de som van alle kansen. Getoetst tegen je target-tempo.</p>
     <p><b>Hoe sturen:</b> te weinig gewogen in beeld? Dan is de boodschap "bovenaan de funnel bijvullen" — anders val je over ~2 maanden terug.</p>` },
+  breakeven: { t: '⚖️ Break-even', h: `
+    <p><b>Wat je ziet:</b> hoeveel plaatsingen per maand je nodig hebt om je kosten te dekken. Elke plaatsing daarboven is winst.</p>
+    <p><b>Hoe berekend:</b> (gemiddelde maandkosten − doorlopende flex-marge) ÷ (gemiddelde fee × blijfkans). Dus flex verlaagt je break-even, want die dekt al een deel van de kosten.</p>
+    <p><b>Hoe sturen:</b> zet dit naast je target. Zit je target ruim boven break-even, dan bouw je buffer op; zit je eronder, dan teer je in.</p>` },
   maandtabel: { t: '📋 Maandtabel', h: `
     <p><b>Wat je ziet:</b> de cijfers onder de grafiek — maand voor maand in en uit.</p>
     <p><b>Hoe berekend:</b> in = facturen (op verwachte betaaldatum) + flex + scenario-omzet; uit = kosten + btw-afdracht + aflossing.</p>
     <p><b>Hoe sturen:</b> hier zie je wélke maand krap wordt en waaróm (bijvoorbeeld een btw-kwartaal in jan/apr/jul/okt).</p>` },
+
+  // ── Vandaag ──
+  v_openstaand: { t: '🧾 Openstaand', h: `
+    <p><b>Wat je ziet:</b> facturen die verstuurd zijn maar nog niet betaald (excl. btw).</p>
+    <p><b>Hoe berekend:</b> som van alle termijnen met status "gefactureerd". Yuki werkt dit automatisch bij als er betaald wordt.</p>
+    <p><b>Hoe sturen:</b> loopt dit op, dan is het tijd om te bellen — geld dat binnen zou moeten zijn, staat nog uit.</p>` },
+  v_flex: { t: '🟢 Flex run-rate', h: `
+    <p><b>Wat je ziet:</b> je doorlopende flex-marge omgerekend naar een maandbedrag.</p>
+    <p><b>Hoe berekend:</b> gemiddelde van de laatste 4 weken (uitbetaald door Pronkert) × 52 ÷ 12.</p>
+    <p><b>Hoe sturen:</b> dit is je vaste basisinkomen naast W&S; hoe hoger, hoe lager je break-even op plaatsingen.</p>` },
+  v_acties: { t: '📌 Acties', h: `
+    <p><b>Wat je ziet:</b> alles wat vandaag je aandacht vraagt: factureren, late betalers, plaatsingen afronden, stops verwerken.</p>
+    <p><b>Hoe berekend:</b> automatisch uit je factuurschema, garanties en signalen van het bord. Rood = urgent.</p>
+    <p><b>Hoe sturen:</b> werk deze lijst leeg — elke actie is geld dat binnenkomt of een risico dat je afdekt.</p>` },
+  v_agent: { t: '🧠 Advies van je finance agent', h: `
+    <p><b>Wat je ziet:</b> de belangrijkste kansen, gevaren en sterktes die de app in je cijfers ziet.</p>
+    <p><b>Hoe berekend:</b> recruitment-vuistregels (buffer, klantconcentratie, stop-percentage, break-even, seizoenseffecten) toegepast op je eigen data.</p>
+    <p><b>Hoe sturen:</b> begin je week hiermee; het tabblad Advies geeft de volledige lijst met onderbouwing.</p>` },
+  v_potjes: { t: '💰 Belastingpotjes', h: `
+    <p><b>Wat je ziet:</b> hoeveel je opzij moet zetten voor btw en vennootschapsbelasting, en je winst-indicatie.</p>
+    <p><b>Hoe berekend:</b> btw = ontvangen btw dit kwartaal − voorbelasting; Vpb = % over je winst YTD (liefst verankerd op Yuki).</p>
+    <p><b>Hoe sturen:</b> zie dit als geld dat niet van jou is — houd het apart zodat een aanslag nooit verrast.</p>` },
+  v_risico: { t: '⚠️ Risico\'s', h: `
+    <p><b>Wat je ziet:</b> je grootste afhankelijkheden: klantconcentratie, stop-percentage, vervallen omzet en betaalduur (DSO).</p>
+    <p><b>Hoe berekend:</b> aandeel per klant in je omzet, gestopte plaatsingen ÷ totaal, en gemiddelde dagen factuur→betaald.</p>
+    <p><b>Hoe sturen:</b> één klant boven ~35% is kwetsbaar; een hoge DSO betekent dat je op je eigen geld wacht.</p>` },
+
+  // ── Advies ──
+  a_cijfers: { t: '📐 De cijfers die een adviseur checkt', h: `
+    <p><b>Wat je ziet:</b> de kern-indicatoren die een financieel adviseur in een recruitmentbureau zou nalopen.</p>
+    <p><b>Hoe berekend:</b> per thema een norm (bijv. buffer 3–6 mnd kosten, cost-per-placement < 30% fee) met jouw actuele waarde ernaast.</p>
+    <p><b>Hoe sturen:</b> groen = op orde, oranje/rood = aandacht. Dit is je maandelijkse APK.</p>` },
+  a_kanaal: { t: '📣 Wervingskanalen', h: `
+    <p><b>Wat je ziet:</b> welk kanaal (Meta, Indeed, referral…) welke omzet aan plaatsingen opleverde.</p>
+    <p><b>Hoe berekend:</b> per gekoppelde bord-kandidaat het bron-veld × de netto fee van de plaatsing.</p>
+    <p><b>Hoe sturen:</b> stop budget in de kanalen die plaatsingen opleveren, niet alleen sollicitanten.</p>` },
+  a_team: { t: '👥 Team & snelheid', h: `
+    <p><b>Wat je ziet:</b> omzet per recruiter en de gemiddelde time-to-fill (dagen van instroom tot plaatsing).</p>
+    <p><b>Hoe berekend:</b> per gekoppelde kandidaat de recruiter × netto fee; snelheid = dagen tussen eerste fase en geplaatst.</p>
+    <p><b>Hoe sturen:</b> een korte time-to-fill = meer plaatsingen met dezelfde mensen; hier zie je waar het stokt.</p>` },
+
+  // ── Flex ──
+  f_marge: { t: '📈 Wekelijkse flex-marge', h: `
+    <p><b>Wat je ziet:</b> de marge die Pronkert je wekelijks uitbetaalt over de flexkrachten.</p>
+    <p><b>Hoe berekend:</b> je voert per week het uitgekeerde bedrag in; de app maakt er een run-rate en trend van.</p>
+    <p><b>Hoe sturen:</b> een stijgende lijn verlaagt je break-even; een dip is een vroeg signaal dat flexkrachten wegvallen.</p>` },
+  f_krachten: { t: '👷 Flexkrachten via Pronkert', h: `
+    <p><b>Wat je ziet:</b> je actieve flexkrachten met marge per uur en de waarde tot de kosteloze overname.</p>
+    <p><b>Hoe berekend:</b> marge/uur = (klantfactor − inkoopfactor) × uurloon; overname-waarde = marge/uur × de afgesproken overname-uren.</p>
+    <p><b>Hoe sturen:</b> zie per kracht wat 'ie waard is en tot wanneer; zo weet je of een vroege overname de moeite loont.</p>` },
+
+  // ── Kosten ──
+  k_budget: { t: '📋 Budget — vaste maandlasten', h: `
+    <p><b>Wat je ziet:</b> je vaste terugkerende kosten per maand (loon, lease, management fee, overige).</p>
+    <p><b>Hoe berekend:</b> je zet ze één keer met een ingangsmaand; de projectie gebruikt dit waar nog geen werkelijke cijfers zijn.</p>
+    <p><b>Hoe sturen:</b> dit is je kostenbasis en bepaalt direct je break-even en runway.</p>` },
+  k_vgl: { t: '📊 Budget vs. werkelijk', h: `
+    <p><b>Wat je ziet:</b> per maand je begrote kosten naast wat het echt werd.</p>
+    <p><b>Hoe berekend:</b> werkelijk vul je per maand in (of komt uit Yuki); zolang dat er niet is, telt het budget.</p>
+    <p><b>Hoe sturen:</b> structureel duurder dan begroot? Dan klopt je budget niet meer — pas het aan zodat je prognose realistisch blijft.</p>` },
+  k_bank: { t: '🏦 Bankmutaties', h: `
+    <p><b>Wat je ziet:</b> de transacties die je via een bank-CSV importeerde.</p>
+    <p><b>Hoe berekend:</b> ingelezen uit je export (ING/Rabobank/generiek); dubbele regels worden overgeslagen.</p>
+    <p><b>Hoe sturen:</b> handig om je werkelijke kosten en saldo te staven tegen wat de app verwacht.</p>` },
 };
 function uitlegChip(key, txt = 'ℹ️ uitleg') { return `<span class="uitleg" data-uitleg="${key}">${txt}</span>`; }
 function openUitleg(key) {
@@ -67,6 +135,37 @@ function openUitleg(key) {
   openModal(`<div class="modal-head"><h2>${esc(u.t)}</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
     <div class="uitleg-body">${u.h}</div>
     <div class="modal-foot"><button class="btn primary" onclick="closeModal()">Duidelijk</button></div>`, { narrow: true });
+}
+
+// ── opgeslagen scenario's (prognoses voor de maandbespreking) ───
+function cfSavedScenarios() { return Array.isArray(D.settings.scenarios) ? D.settings.scenarios : []; }
+async function cfSaveScenario(naam) {
+  const snap = { ...scenarioState };
+  const arr = cfSavedScenarios().filter(s => s.naam !== naam);
+  arr.push({ naam, sc: snap });
+  await saveSetting('scenarios', arr);
+  toast(`Scenario "${naam}" opgeslagen ✓`); rerender();
+}
+async function cfDeleteScenario(naam) {
+  await saveSetting('scenarios', cfSavedScenarios().filter(s => s.naam !== naam));
+  if (S('scenario_default') === naam) await saveSetting('scenario_default', null);
+  toast('Scenario verwijderd'); rerender();
+}
+async function cfSetDefaultScenario(naam) {
+  await saveSetting('scenario_default', naam || null);
+  toast(naam ? `"${naam}" is nu je officiële prognose ★` : 'Standaard gewist'); rerender();
+}
+function cfLoadScenario(naam) {
+  const s = cfSavedScenarios().find(x => x.naam === naam);
+  if (s) { scenarioState = { ...scenarioState, ...s.sc }; rerender(); }
+}
+function openSaveScenario() {
+  openModal(`<div class="modal-head"><h2>Scenario opslaan</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+    <div class="form-grid"><div class="span2"><label>Naam</label><input id="scn_naam" placeholder="bijv. Zomerdip of Extra recruiter"></div></div>
+    <p class="muted">Slaat de huidige stand van alle wat-als knoppen op. Zet 'm daarna met ★ als officiële prognose.</p>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
+    <button class="btn primary" id="scn_save">Opslaan</button></div>`, { narrow: true });
+  $('#scn_save').onclick = async () => { const n = $('#scn_naam').value.trim(); if (!n) return toast('Vul een naam in', true); closeModal(); await cfSaveScenario(n); };
 }
 
 function openSaldoModal() {
@@ -167,6 +266,7 @@ function cfDynHtml(sc) {
   const gemFee = proj.gemFee;
   const behoud = proj.blijfkans;
   const pf = pipelineForecast();
+  const be = breakEven();
   const m0 = monthKey(todayISO());
 
   // ── drie vooruitblik-scenario's (zelfde blijfkans/aflossing, ander tempo) ──
@@ -216,7 +316,8 @@ function cfDynHtml(sc) {
    <div class="panel mb">${left > 0
       ? `<div class="pot"><span>📍 Nog <b>${left}</b> plaatsing${left === 1 ? '' : 'en'} te gaan deze maand. Haal je die niet, dan mis je ~<b>${eur(left * gemFee)}</b> omzet — zichtbaar in je cash rond <b>${cashMaand2}</b>.</span></div>`
       : `<div class="pot"><span>✓ Target deze maand gehaald: <b>${bp.netto}/${tgt}</b> netto plaatsingen (gelijk aan het bord).</span></div>`}
-      <div class="pot"><span>🔄 Blijfkans <b>${Math.round(behoud * 100)}%</b> (historisch: ${D.placements.filter(p => p.gestopt_op).length} van ${D.placements.length} plaatsingen gestopt). Van elke <b>${tgt}</b> plaatsingen reken ik op ~<b>${(tgt * behoud).toFixed(1)}</b> die blijven. ${uitlegChip('blijfkans')}</span></div></div>`;
+      <div class="pot"><span>🔄 Blijfkans <b>${Math.round(behoud * 100)}%</b> (historisch: ${D.placements.filter(p => p.gestopt_op).length} van ${D.placements.length} plaatsingen gestopt). Van elke <b>${tgt}</b> plaatsingen reken ik op ~<b>${(tgt * behoud).toFixed(1)}</b> die blijven. ${uitlegChip('blijfkans')}</span></div>
+      ${be.nodig != null ? `<div class="pot"><span>⚖️ Break-even: ~<b>${be.nodig.toFixed(1)}</b> plaatsing${be.nodig >= 1.5 || be.nodig < 1 ? 'en' : ''}/mnd dekken je kosten (${eur(be.kostPm)}/mnd − flex ${eur(be.flexPm)}). Boven je target van <b>${tgt}</b> hou je ~<b>${eur(Math.max(0, tgt - be.nodig) * be.perPlaatsing)}</b> netto over per maand. ${uitlegChip('breakeven')}</span></div>` : ''}</div>`;
 
   const chart = lineChart(proj.rows.map(r => r.label), [
     { label: 'Banksaldo (huidig scenario)', color: 'var(--accent)', values: proj.rows.map(r => r.saldo) },
@@ -244,10 +345,17 @@ function cfTabelHtml(sc) {
 function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
   const behoud0 = 1 - (kpis().stopPct || 0);
-  const sc = scenarioState || (scenarioState = {
-    bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0, tegenvallerMarge: 2,
-    omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
-  });
+  if (!scenarioState) {
+    const basis = {
+      bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0, tegenvallerMarge: 2,
+      omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
+    };
+    const def = cfSavedScenarios().find(s => s.naam === S('scenario_default'));
+    scenarioState = def ? { ...basis, ...def.sc } : basis;
+  }
+  const sc = scenarioState;
+  const saved = cfSavedScenarios();
+  const defNaam = S('scenario_default');
   if (sc.plaatsingenPm == null) sc.plaatsingenPm = tgt0;
   if (sc.blijfkans == null) sc.blijfkans = behoud0;
   if (sc.tegenvallerMarge == null) sc.tegenvallerMarge = 2;
@@ -273,6 +381,9 @@ function renderCashflow(root) {
 
     <div class="grid cols-2 mb">
       <div class="panel"><h2>🎛 Wat-als knoppen <span class="muted">— denk in plaatsingen</span> ${uitlegChip('knoppen')}</h2>
+        <div class="slider-row"><span>Opgeslagen prognose${defNaam ? ` <span class="muted">★ ${esc(defNaam)}</span>` : ''}</span>
+          <select id="sc_load"><option value="">— kies scenario —</option>${saved.map(s => `<option ${s.naam === defNaam ? 'selected' : ''}>${esc(s.naam)}</option>`).join('')}</select>
+          <span style="display:flex;gap:4px;justify-content:flex-end"><button class="btn small" id="sc_save" title="Huidige stand opslaan">💾</button><button class="btn small" id="sc_star" title="Als officiële prognose">★</button><button class="btn small" id="sc_del" title="Verwijderen">🗑</button></span></div>
         <div class="slider-row"><span>Nieuwe omzet baseer op</span>
           <select id="sc_bron"><option value="pijplijn" ${sc.bron === 'pijplijn' ? 'selected' : ''}>Gewogen pijplijn → daarna target-tempo</option>
           <option value="target" ${sc.bron === 'target' ? 'selected' : ''}>Vast tempo: X plaatsingen/mnd</option>
@@ -319,7 +430,9 @@ function renderCashflow(root) {
       ${pf.rows.map(r => `<tr><td>${esc(r.c.naam)}</td><td>${esc(r.c.klant || '')}</td><td>${tag(r.c.fase, r.kans >= .5 ? 'green' : r.kans >= .25 ? 'amber' : 'gray')}</td>
         <td class="num">${Math.round(r.kans * 100)}%</td><td class="num">${eur(r.fee)}</td><td class="num"><b>${eur(r.gewogen)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
       </table></div>
-      <p class="muted mt">Kans per fase (instelbaar): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Gewogen = kans × gem. fee. Na de bord-horizon rekent de projectie met het target-tempo.</p>`
+      <p class="muted mt">${Object.keys(pf.kalibratie || {}).length
+        ? `Kansen <b>gekalibreerd op je eigen doorstroom</b> waar genoeg data is: ${Object.entries(pf.kalibratie).map(([f, m]) => `${esc(f)} ${Math.round(m.geplaatst / m.n * 100)}% (n=${m.n})`).join(' · ')}. Overige fases: standaardaanname.`
+        : 'Kans per fase (instelbaar): voorselectie 10% · gesprek 20% · meeloopdag 50% · contract ondertekenen 80%. Zodra het bord genoeg fase-historie heeft, kalibreert dit automatisch op je eigen cijfers.'} Gewogen = kans × gem. fee. Na de bord-horizon rekent de projectie met het target-tempo.</p>`
       : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
 
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>`;
@@ -336,6 +449,10 @@ function renderCashflow(root) {
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
     $('#scv_hire').textContent = eur(sc.extraHirePm);
   };
+  $('#sc_load').onchange = e => cfLoadScenario(e.target.value);
+  $('#sc_save').onclick = openSaveScenario;
+  $('#sc_star').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een opgeslagen scenario', true); cfSetDefaultScenario(n); };
+  $('#sc_del').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een scenario', true); cfDeleteScenario(n); };
   $('#sc_bron').onchange = e => { sc.bron = e.target.value; upd(); };
   $('#sc_pl').oninput = e => { sc.plaatsingenPm = +e.target.value; upd(); };
   $('#sc_blijf').oninput = e => { sc.blijfkans = +e.target.value / 100; upd(); };
@@ -349,8 +466,6 @@ function renderCashflow(root) {
   $('#cfSaldo').onclick = openSaldoModal;
   $('#cfCsv').onclick = openCsvImport;
   root.addEventListener('click', async e => {
-    const u = e.target.closest('[data-uitleg]');
-    if (u) { openUitleg(u.dataset.uitleg); return; }
     const b = e.target.closest('[data-lp]');
     if (!b) return;
     await dbWrite('fin_loan_payments', t => t.update({ gepland: false, datum: todayISO() }).eq('id', +b.dataset.lp));

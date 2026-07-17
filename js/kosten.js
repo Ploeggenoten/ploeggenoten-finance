@@ -39,17 +39,17 @@ function renderKosten(root) {
     <div class="spread mb"><h1>Kosten</h1>
       <button class="btn primary" id="kNieuwBudget">+ Vaste last</button></div>
 
-    <div class="panel mb"><h2>📋 Budget — vaste maandlasten</h2>
+    <div class="panel mb"><h2>📋 Budget — vaste maandlasten ${uitlegChip('k_budget')}</h2>
       <div class="table-wrap"><table>
       <tr><th>Categorie</th><th class="num">€ p/m</th><th>Vanaf</th><th>Tot</th><th>Notitie</th><th></th></tr>
       ${budgetRows || '<tr><td colspan="6" class="empty">Nog geen vaste lasten</td></tr>'}</table></div></div>
 
     <div class="grid cols-2">
-      <div class="panel"><h2>📊 Budget vs. werkelijk <span class="muted">(klik op een maand om in te vullen)</span></h2>
+      <div class="panel"><h2>📊 Budget vs. werkelijk <span class="muted">(klik op een maand om in te vullen)</span> ${uitlegChip('k_vgl')}</h2>
         <div class="table-wrap"><table>
         <tr><th>Maand</th><th class="num">Budget</th><th class="num">Werkelijk</th><th class="num">Verschil</th></tr>
         ${realRows}</table></div></div>
-      <div class="panel"><h2>🏦 Bankmutaties (uit CSV-import)</h2>
+      <div class="panel"><h2>🏦 Bankmutaties (uit CSV-import) ${uitlegChip('k_bank')}</h2>
         ${txRows ? `<div class="table-wrap"><table><tr><th>Maand</th><th class="num">Bij</th><th class="num">Af</th></tr>${txRows}</table></div>`
         : '<div class="empty">Nog geen transacties geïmporteerd — dat kan op de Cashflow-pagina.</div>'}</div>
     </div>`;

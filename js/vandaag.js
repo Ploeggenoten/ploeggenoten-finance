@@ -11,17 +11,17 @@ function renderVandaag(root) {
   const tgt = targetInfo();
   const kpiHtml = `
   <div class="grid cols-4">
-    <div class="kpi"><div class="lbl">Banksaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''}</div>
+    <div class="kpi" data-uitleg="saldo" style="cursor:pointer"><div class="lbl">Banksaldo${saldo ? ' · ' + fmtD(saldo.datum) : ''} ${uitlegChip('saldo', 'ℹ️')}</div>
       <div class="val">${saldo ? eur(saldo.saldo) : '—'}</div>
       <div class="sub">vrij besteedbaar na potjes: <b>${vrij == null ? '—' : eur(vrij)}</b></div></div>
-    <div class="kpi ${k.openstaand > 0 ? 'warn' : ''}"><div class="lbl">Openstaand (gefact., niet betaald)</div>
+    <div class="kpi ${k.openstaand > 0 ? 'warn' : ''}" data-uitleg="v_openstaand" style="cursor:pointer"><div class="lbl">Openstaand (gefact., niet betaald) ${uitlegChip('v_openstaand', 'ℹ️')}</div>
       <div class="val">${eur(k.openstaand)}</div><div class="sub">excl. btw</div></div>
-    <div class="kpi ${tgt.aantalTarget && tgt.plaatsingen >= tgt.aantalTarget ? 'good' : ''}"><div class="lbl">Deze maand${tgt.aantalTarget ? ' · target bord' : ''}</div>
+    <div class="kpi ${tgt.aantalTarget && tgt.plaatsingen >= tgt.aantalTarget ? 'good' : ''}" data-uitleg="dezemaand" style="cursor:pointer"><div class="lbl">Deze maand${tgt.aantalTarget ? ' · target bord' : ''} ${uitlegChip('dezemaand', 'ℹ️')}</div>
       <div class="val">${tgt.aantalTarget ? `${tgt.plaatsingen} / ${tgt.aantalTarget}` : eur(k.omzetDezeMaand)}</div>
       <div class="sub">${tgt.aantalTarget
         ? `plaatsingen · gefactureerd ${eur(k.omzetDezeMaand)}${tgt.omzetTarget ? ' van ~' + eur(tgt.omzetTarget) : ''}`
         : 'gefactureerd; nog te factureren: ' + eur(k.nogTeFactureren)}</div></div>
-    <div class="kpi"><div class="lbl">Flex (run-rate p/m)</div>
+    <div class="kpi" data-uitleg="v_flex" style="cursor:pointer"><div class="lbl">Flex (run-rate p/m) ${uitlegChip('v_flex', 'ℹ️')}</div>
       <div class="val">${fx.maandRunRate ? eur(fx.maandRunRate) : '—'}</div>
       <div class="sub">${fx.laatste ? 'laatste week ' + eur(fx.laatste.bedrag) : 'nog geen weken ingevoerd'}</div></div>
   </div>`;
@@ -73,11 +73,11 @@ function renderVandaag(root) {
     <div class="muted mb">${lijst.length} actie${lijst.length === 1 ? '' : 's'} open</div>
     ${kpiHtml}
     <div class="grid cols-2 mt">
-      <div class="panel"><h2>📌 Acties</h2>${actieHtml}</div>
+      <div class="panel"><h2>📌 Acties ${uitlegChip('v_acties')}</h2>${actieHtml}</div>
       <div>
-        <div class="panel mb"><h2>🧠 Advies van je finance agent</h2>${adviesHtml}</div>
-        <div class="panel mb"><h2>💰 Belastingpotjes</h2>${potHtml}</div>
-        <div class="panel"><h2>⚠️ Risico's</h2>${risicoHtml}</div>
+        <div class="panel mb"><h2>🧠 Advies van je finance agent ${uitlegChip('v_agent')}</h2>${adviesHtml}</div>
+        <div class="panel mb"><h2>💰 Belastingpotjes ${uitlegChip('v_potjes')}</h2>${potHtml}</div>
+        <div class="panel"><h2>⚠️ Risico's ${uitlegChip('v_risico')}</h2>${risicoHtml}</div>
       </div>
     </div>`;
   $('#naarAdvies').onclick = () => switchView('advies');

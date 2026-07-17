@@ -42,7 +42,7 @@ function renderFlex(root) {
         <div class="sub">recurring marge vs. ${eur(vaste)}/m</div></div>
     </div>
 
-    <div class="panel mb"><h2>📈 Wekelijkse marge</h2>${chart}</div>
+    <div class="panel mb"><h2>📈 Wekelijkse marge ${uitlegChip('f_marge')}</h2>${chart}</div>
 
     ${flexPlaatsingenPanel()}
 
@@ -102,7 +102,7 @@ function flexPlaatsingenPanel() {
   const st = flexPlStats();
   const actiefRows = st.rows.map(r => flexPlRij(r, false)).join('');
   const afgerondRows = st.gestoptRows.map(r => flexPlRij(r, true)).join('');
-  return `<div class="panel mb"><div class="spread mb"><h2>👷 Flexkrachten via Pronkert</h2>
+  return `<div class="panel mb"><div class="spread mb"><h2>👷 Flexkrachten via Pronkert ${uitlegChip('f_krachten')}</h2>
       <button class="btn primary small" id="fpNieuw">+ Flexkracht</button></div>
     <div class="grid cols-4 mb">
       <div class="kpi"><div class="lbl">Actief lopend</div><div class="val">${st.nActief}</div><div class="sub">${st.nConcept ? st.nConcept + ' nog aan te vullen' : 'via Pronkert'}</div></div>
