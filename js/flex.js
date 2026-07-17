@@ -92,9 +92,9 @@ function flexPlRij(r, afgerond = false) {
     <td class="num">${r.margePerUur != null ? eur2(r.margePerUur) : '—'}</td>
     ${afgerond
       ? `<td class="num">${r.gewerkteUren != null ? r.gewerkteUren + ' u' : '<span class="muted">uren?</span>'}</td>
-         <td class="num">${r.verdiend != null ? `<b style="color:var(--green)">${eur(r.verdiend)}</b>` : '—'}</td>`
-      : `<td class="num">${r.margePerMaand != null ? eur(r.margePerMaand) : '—'}</td>
-         <td class="num">${r.overnameWaarde != null ? `<b>${eur(r.overnameWaarde)}</b>` : '—'}</td>`}
+         <td class="num">${r.verdiend != null ? `<b style="color:var(--green)">${eur(r.verdiend)}</b>${r.margeWerkelijk != null ? ' <span class="muted" title="werkelijke marge uit de Pronkert-facturen">✓</span>' : ''}` : '—'}</td>`
+      : `<td class="num">${r.gewerkteUren != null ? `${r.gewerkteUren} u${r.verdiend != null ? ` · <b style="color:var(--green)">${eur(r.verdiend)}</b>${r.margeWerkelijk != null ? ' <span class="muted" title="werkelijke marge uit de Pronkert-facturen">✓</span>' : ''}` : ''}` : '<span class="muted">—</span>'}</td>
+         <td class="num">${r.resterendUren != null ? `<b>nog ${Math.round(r.resterendUren)} u</b>${r.overnameWaarde != null ? `<br><span class="muted">waarde ${eur(r.overnameWaarde)}</span>` : ''}` : (r.overnameWaarde != null ? `<b>${eur(r.overnameWaarde)}</b>` : '<span class="muted">overname-uren? ✎</span>')}</td>`}
     <td class="right"><button class="btn small ghost" data-fpedit="${f.id}">✎</button>
       ${afgerond ? '' : `<button class="btn small ghost" data-fpstop="${f.id}" title="Gestopt">⏹</button>`}
       <button class="btn small ghost" data-fpdel="${f.id}">✕</button></td></tr>`;
@@ -114,14 +114,14 @@ function flexPlaatsingenPanel() {
     </div>
     <h3>Actief lopend</h3>
     <div class="table-wrap"><table>
-    <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Marge/mnd</th><th class="num">Overname-waarde</th><th></th></tr>
+    <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Gewerkt · verdiend</th><th class="num">Tot kosteloze overname</th><th></th></tr>
     ${actiefRows || '<tr><td colspan="7" class="empty">Geen actieve flexkrachten. Ze verschijnen automatisch vanuit het bord (Contract getekend, type Flex).</td></tr>'}
     </table></div>
     ${st.nGestopt ? `<h3 class="mt">Afgerond / gestopt — verdiende marge</h3>
     <div class="table-wrap"><table>
     <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Factor</th><th class="num">Marge/uur</th><th class="num">Gewerkte uren</th><th class="num">Verdiend</th><th></th></tr>
     ${afgerondRows}</table></div>` : ''}
-    <p class="muted mt">Marge/uur = (klantfactor − inkoopfactor Pronkert) × uurloon. <b>Verdiend</b> = marge/uur × werkelijk gewerkte uren — dat is het geld dat je écht hebt gemaakt. Vul de gewerkte uren in bij het stoppen (of tussentijds via ✎). Afgeronde flexkrachten tellen niet meer mee in "actief lopend", maar hun verdiende marge blijft geteld.</p></div>`;
+    <p class="muted mt">Marge/uur = (klantfactor − inkoopfactor Pronkert) × uurloon. <b>Verdiend</b> = de werkelijke marge uit de Pronkert-facturen (✓, incl. overwerk/toeslagen) of anders marge/uur × gewerkte uren. <b>Tot kosteloze overname</b> = afgesproken overname-uren − gewerkte uren; staat er "overname-uren? ✎", vul dan de afspraak in. Uren en marge worden automatisch bijgewerkt via de margefactuur-import (📄).</p></div>`;
 }
 
 function openFlexStopModal(fp) {

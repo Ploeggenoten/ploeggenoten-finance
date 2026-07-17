@@ -149,14 +149,18 @@ function flexPlBerekening(fp) {
   const compleet = klantfactor && uurloon;
   const margePerUur = compleet ? (klantfactor - inkoop) * uurloon : null;
   const gewerkteUren = fp.gewerkte_uren != null ? Number(fp.gewerkte_uren) : null;
+  // werkelijke marge uit de Pronkert-facturen (incl. overwerk/toeslagen) — leidend boven het model
+  const margeWerkelijk = fp.marge_werkelijk != null ? Number(fp.marge_werkelijk) : null;
   return {
-    klantfactor, inkoop, uurloon, urenPw, overnameUren, compleet, margePerUur, gewerkteUren,
+    klantfactor, inkoop, uurloon, urenPw, overnameUren, compleet, margePerUur, gewerkteUren, margeWerkelijk,
     margePerWeek: compleet ? margePerUur * urenPw : null,
     margePerMaand: compleet ? margePerUur * urenPw * 52 / 12 : null,
     // totale marge tot de kosteloze overname (het bedrag dat je "verdient" vóór de klant gratis mag overnemen)
     overnameWaarde: compleet && overnameUren ? margePerUur * overnameUren : null,
-    // werkelijk verdiend = marge/uur × gewerkte uren (leidend zodra ingevuld)
-    verdiend: compleet && gewerkteUren != null ? margePerUur * gewerkteUren : null,
+    // nog te gaan tot de kosteloze overname
+    resterendUren: overnameUren && gewerkteUren != null ? Math.max(0, overnameUren - gewerkteUren) : null,
+    // verdiend: échte factuurmarge waar bekend, anders marge/uur × gewerkte uren
+    verdiend: margeWerkelijk != null ? margeWerkelijk : (compleet && gewerkteUren != null ? margePerUur * gewerkteUren : null),
   };
 }
 
