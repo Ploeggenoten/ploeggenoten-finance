@@ -445,6 +445,72 @@ function breakEven() {
   return { kostPm, flexPm, perPlaatsing, gemFee, behoud, nodig };
 }
 
+// ── jaardoel-GPS: van winstdoel terug naar benodigde plaatsingen ──
+function jaardoelGps() {
+  const doel = Number(S('doel_winst_jaar', 0)) || null;
+  const pot = potjes();
+  const k = kpis();
+  const gemFee = k.gemFee || 8500;
+  const blijf = 1 - (k.stopPct || 0);
+  const flexPm = flexStats().maandRunRate;
+  const t = todayISO(), m = +t.slice(5, 7);
+  const mndRest = 12 - m + 1;                          // incl. lopende maand
+  const kostenOver = n => { let s = 0; for (let i = 0; i < n; i++) { const mk = addMonths(monthKey(t), i); s += actueelVoorMaand(mk) ?? budgetVoorMaand(mk); } return s; };
+  const maak = (nMnd, teGaanWinst) => {
+    const kosten = kostenOver(nMnd);
+    const omzetNodig = Math.max(0, teGaanWinst) + kosten;
+    const flexBij = flexPm * nMnd;
+    const wsNodig = Math.max(0, omzetNodig - flexBij);
+    const perPlaatsing = gemFee * blijf;
+    const plaats = perPlaatsing > 0 ? wsNodig / perPlaatsing : null;
+    return { nMnd, kosten, omzetNodig, flexBij, wsNodig, plaats, perMnd: plaats != null ? plaats / nMnd : null };
+  };
+  const restJaar = doel != null ? maak(mndRest, doel - pot.winstYtd) : null;
+  const rolling = doel != null ? maak(12, doel) : null;   // zelfde doel, maar over de komende 12 mnd
+  const verstreken = Math.max(0.5, m - 1 + (+t.slice(8, 10)) / 30);
+  const tempo = k.plaatsingenYtd / verstreken;            // huidig tempo (plaatsingen/mnd dit jaar)
+  return { doel, winstYtd: pot.winstYtd, teGaan: doel != null ? doel - pot.winstYtd : null,
+    restJaar, rolling, tempo, gemFee, blijf, flexPm, mndRest };
+}
+
+// ── uitkeer-planner (DGA): wat kan er veilig naar privé/aflossing ──
+function uitkeerRuimte(extra = 0) {
+  const proj = projectie(12);
+  const buffer = Number(S('cash_buffer_min', 10000));
+  const vpb = potjes().vpbPot;
+  const laagste = proj.laagste.saldo;
+  const ruimte = Math.max(0, laagste - buffer - vpb);
+  return { laagste, laagsteLabel: proj.laagste.label, buffer, vpb, ruimte,
+    naExtra: laagste - extra, veiligNaExtra: laagste - extra >= buffer + vpb };
+}
+
+// ── tarief-adviseur: wat levert elke klant echt op, en waar zit rek ──
+function tariefAdvies() {
+  const t = todayISO(), y = t.slice(0, 4);
+  const verstrekenMnd = Math.max(1, +t.slice(5, 7) - 1 + (+t.slice(8, 10)) / 30);
+  const per = {};
+  for (const p of D.placements) {
+    if ((p.contract_datum || '').slice(0, 4) !== y) continue;
+    const st = placementStats(p);
+    const k = per[p.klant] = per[p.klant] || { klant: p.klant, n: 0, netto: 0, gestopt: 0 };
+    k.n++; k.netto += Number(p.fee_excl || 0) - st.vervallen;
+    if (p.gestopt_op) k.gestopt++;
+  }
+  const rows = Object.values(per).map(k => {
+    const tr = tariefVoor(k.klant, '');
+    return { ...k, pct: tr ? tr.pct : null, jaarNetto: k.netto * 12 / verstrekenMnd };
+  });
+  const met = rows.filter(r => r.pct && r.netto > 0);
+  const totNetto = met.reduce((s, r) => s + r.netto, 0) || 1;
+  const bench = met.length ? met.reduce((s, r) => s + r.pct * r.netto, 0) / totNetto : null;
+  rows.forEach(r => {
+    r.bench = bench;
+    // wat levert +verschil-naar-benchmark op, op jaarbasis bij gelijk volume?
+    r.potentie = (r.pct && bench && r.pct < bench - 0.002) ? r.jaarNetto * (bench - r.pct) / r.pct : 0;
+  });
+  return { rows: rows.sort((a, b) => b.potentie - a.potentie || b.netto - a.netto), bench };
+}
+
 function pipelineForecast() {
   // Fase-kansen zijn vast (door Tjeerd ingesteld); alleen de UITVAL (blijfkans) leert de app zelf.
   const kansen = Object.assign({}, FASE_KANSEN_DEFAULT, S('fase_kansen', {}) || {});

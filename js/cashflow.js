@@ -56,6 +56,14 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> wat er nú op het bord staat, vertaald naar verwachte plaatsingen én euro's. Een kandidaat telt pas als plaatsing vanaf de fase "Contract getekend" — alles daarvoor (óók "Contract ondertekenen") is nog onzekere pijplijn.</p>
     <p><b>Hoe berekend:</b> per kandidaat kans-per-fase × gemiddelde fee = <b>bruto gewogen</b>. Daar gaat nog een verwachte uitval vanaf → <b>netto</b>. De kans per fase is vast ingesteld; de <b>uitval leert de app zelf</b> uit je eigen stops (blijfkans). De cashflow-projectie rekent met netto, zodat je nooit te rooskleurig plant.</p>
     <p><b>Hoe sturen:</b> te weinig gewogen in beeld? Dan is de boodschap "bovenaan de funnel bijvullen" — anders val je over ~2 maanden terug.</p>` },
+  gps: { t: '🎯 Jaardoel-GPS', h: `
+    <p><b>Wat je ziet:</b> je winstdoel voor dit jaar en wat er nog moet gebeuren om het te halen — in omzet én in plaatsingen per maand. Twee horizonten: t/m 31 december en de komende 12 maanden.</p>
+    <p><b>Hoe berekend:</b> nog te maken winst + resterende kosten = benodigde omzet; daar gaat de flex-run-rate vanaf; wat overblijft ÷ (gemiddelde fee × blijfkans) = benodigde plaatsingen. "Huidig tempo" = je plaatsingen dit jaar per maand.</p>
+    <p><b>Hoe sturen:</b> ligt je tempo onder het nodig-tempo, dan weet je precies hoeveel plaatsingen per maand erbij moeten — of dat je aan kosten/flex moet draaien.</p>` },
+  uitkeer: { t: '💰 Uitkeer-planner', h: `
+    <p><b>Wat je ziet:</b> hoeveel je nu veilig kunt uitkeren (management fee extra, dividend) of extra kunt aflossen zonder in de gevarenzone te komen.</p>
+    <p><b>Hoe berekend:</b> het laagste punt van je 12-maands cashprojectie, minus je veiligheidsbuffer en de Vpb-reservering. Geplande aflossingen zitten al in de projectie.</p>
+    <p><b>Hoe sturen:</b> schuif "extra uitkeren" en zie direct het effect op je laagste punt. Groen = kan; rood = je zakt onder je buffer.</p>` },
   breakeven: { t: '⚖️ Break-even', h: `
     <p><b>Wat je ziet:</b> hoeveel plaatsingen per maand je nodig hebt om je kosten te dekken. Elke plaatsing daarboven is winst.</p>
     <p><b>Hoe berekend:</b> (gemiddelde maandkosten − doorlopende flex-marge) ÷ (gemiddelde fee × blijfkans). Dus flex verlaagt je break-even, want die dekt al een deel van de kosten.</p>
@@ -96,6 +104,10 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> de kern-indicatoren die een financieel adviseur in een recruitmentbureau zou nalopen.</p>
     <p><b>Hoe berekend:</b> per thema een norm (bijv. buffer 3–6 mnd kosten, cost-per-placement < 30% fee) met jouw actuele waarde ernaast.</p>
     <p><b>Hoe sturen:</b> groen = op orde, oranje/rood = aandacht. Dit is je maandelijkse APK.</p>` },
+  a_tarief: { t: '🏷 Tarief-adviseur', h: `
+    <p><b>Wat je ziet:</b> per klant het afgesproken W&S-tarief naast je gewogen gemiddelde, en hoeveel "rek" er op jaarbasis zit als een klant naar dat gemiddelde zou gaan.</p>
+    <p><b>Hoe berekend:</b> netto omzet per klant dit jaar (na vervallen termijnen), geëxtrapoleerd naar 12 maanden; rek = die jaaromzet × het tariefverschil. Gemiddelde is gewogen naar omzet.</p>
+    <p><b>Hoe sturen:</b> dit is onderhandelmunitie: bij contractverlenging of een nieuwe aanvraag weet je precies welke klant onder je norm zit en wat één procentpunt waard is. "Geen tarief ✎" = vastleggen bij Instellingen.</p>` },
   a_kanaal: { t: '📣 Wervingskanalen', h: `
     <p><b>Wat je ziet:</b> welk kanaal (Meta, Indeed, referral…) welke omzet aan plaatsingen opleverde.</p>
     <p><b>Hoe berekend:</b> per gekoppelde bord-kandidaat het bron-veld × de netto fee van de plaatsing.</p>
@@ -369,6 +381,29 @@ function cfTerugblikHtml() {
     <p class="muted mt">Voorspeld = je plan/target voor die maand${rows.some(r => r.uitSnapshot) ? ' (◇ = vastgelegde pijplijn-forecast)' : ''}. Behaald = plaatsingen op het bord in die maand. Werkelijk = gefactureerd + flex. Trefzekerheid = werkelijk ÷ voorspelde omzet.</p>`;
 }
 
+// ── uitkeer-planner (DGA) ──────────────────────────────────────
+let _ukExtra = 0;
+function ukHtml() {
+  const uk = uitkeerRuimte(_ukExtra);
+  const veilig = uk.ruimte > 0;
+  return `
+    <div class="pot"><span>Laagste cashpunt komende 12 mnd</span><b>${eur(uk.laagste)} <span class="muted">(${esc(uk.laagsteLabel || '')})</span></b></div>
+    <div class="pot"><span>Aan te houden: buffer + Vpb-pot</span><b>${eur(uk.buffer)} + ${eur(uk.vpb)}</b></div>
+    <div class="pot"><span>Nu veilig uit te keren / af te lossen</span><b style="color:${veilig ? 'var(--green)' : 'var(--red)'}">${eur(uk.ruimte)}</b></div>
+    <div class="slider-row"><span>Wat-als: extra uitkeren</span>
+      <input type="range" id="uk_extra" min="0" max="50000" step="500" value="${_ukExtra}"><b id="ukv_extra">${eur(_ukExtra)}</b></div>
+    ${_ukExtra > 0 ? `<p class="muted" style="margin:4px 0 8px">Bij ${eur(_ukExtra)} extra wordt je laagste punt <b style="color:${uk.veiligNaExtra ? 'var(--green)' : 'var(--red)'}">${eur(uk.naExtra)}</b>${uk.veiligNaExtra ? ' — dat kan.' : ' — <b>onder je buffer + Vpb-reservering, niet doen.</b>'}</p>` : ''}
+    <div class="slider-row"><span>Veiligheidsbuffer</span>
+      <input type="range" id="uk_buffer" min="0" max="40000" step="1000" value="${uk.buffer}"><b id="ukv_buffer">${eur(uk.buffer)}</b></div>
+    <p class="muted">Ruimte = laagste projectie-saldo − buffer − Vpb-reservering. Geplande aflossingen (o.a. aan je moeder) zitten al in de projectie.</p>`;
+}
+function wireUitkeer() {
+  const wrap = $('#ukDyn'); if (!wrap) return;
+  wrap.querySelector('#uk_extra').oninput = e => { _ukExtra = +e.target.value; wrap.innerHTML = ukHtml(); wireUitkeer(); };
+  wrap.querySelector('#uk_buffer').onchange = async e => { await saveSetting('cash_buffer_min', +e.target.value); wrap.innerHTML = ukHtml(); wireUitkeer(); };
+  wrap.querySelector('#uk_buffer').oninput = e => { $('#ukv_buffer').textContent = eur(+e.target.value); };
+}
+
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
@@ -398,12 +433,45 @@ function renderCashflow(root) {
   const plChips = plMaanden.map(mk => `<span class="tag gray">${fmtMaand(mk)}: <b>${pf.perMaandPlaatsMaand[mk].toFixed(1)}</b></span>`).join(' ');
   const behoefte = sc.plaatsingenPm;   // per maand nodig voor target
 
+  const gps = jaardoelGps();
+  const jaarNu = todayISO().slice(0, 4);
+  const gpsBlok = (titel, b) => b ? `
+    <div class="panel2box">
+      <h3 style="margin:0 0 6px">${titel}</h3>
+      <div class="pot"><span>Omzet nodig (excl. btw)</span><b>${eur(b.omzetNodig)}</b></div>
+      <div class="pot"><span>waarvan kosten te dekken</span><b class="muted">${eur(b.kosten)}</b></div>
+      <div class="pot"><span>Flex dekt (run-rate)</span><b>${eur(b.flexBij)}</b></div>
+      <div class="pot"><span>W&S nodig</span><b>${eur(b.wsNodig)}</b></div>
+      <div class="pot"><span>= Plaatsingen</span><b style="color:var(--accent)">${b.plaats != null ? b.plaats.toFixed(1) : '—'} <span class="muted">(${b.perMnd != null ? b.perMnd.toFixed(1) : '—'}/mnd)</span></b></div>
+    </div>` : '';
+  const gpsHtml = gps.doel == null ? `<div class="empty">Vul rechtsboven je winstdoel voor ${jaarNu} in — dan rekent de GPS uit wat er per maand moet gebeuren.</div>` : (() => {
+    const pctDoel = Math.max(0, Math.min(1, gps.winstYtd / gps.doel));
+    const opKoers = gps.restJaar.perMnd != null && gps.tempo >= gps.restJaar.perMnd;
+    return `
+    <div class="grid cols-4 mb">
+      <div class="kpi ${gps.winstYtd >= gps.doel ? 'good' : ''}"><div class="lbl">Winst YTD</div><div class="val">${eur(gps.winstYtd)}</div><div class="sub">van ${eur(gps.doel)} doel (${Math.round(pctDoel * 100)}%)</div></div>
+      <div class="kpi ${gps.teGaan <= 0 ? 'good' : ''}"><div class="lbl">Nog te gaan t/m 31 dec</div><div class="val">${gps.teGaan <= 0 ? '🎉 gehaald' : eur(gps.teGaan)}</div><div class="sub">${gps.mndRest} maanden</div></div>
+      <div class="kpi"><div class="lbl">Nodig tempo</div><div class="val">${gps.restJaar.perMnd != null ? gps.restJaar.perMnd.toFixed(1) : '—'}/mnd</div><div class="sub">plaatsingen (na uitval ${Math.round(gps.blijf * 100)}%)</div></div>
+      <div class="kpi ${opKoers ? 'good' : 'warn'}"><div class="lbl">Huidig tempo ${jaarNu}</div><div class="val">${gps.tempo.toFixed(1)}/mnd</div><div class="sub">${opKoers ? '✓ op koers' : `${(gps.restJaar.perMnd - gps.tempo).toFixed(1)}/mnd te weinig`}</div></div>
+    </div>
+    <div class="cbar mb" style="height:10px"><i style="width:${Math.round(pctDoel * 100)}%;background:${gps.winstYtd >= gps.doel ? 'var(--green)' : 'var(--accent)'};display:block;height:100%"></i></div>
+    <div class="grid cols-2">
+      ${gpsBlok(`📅 T/m 31 december (${gps.mndRest} mnd)`, gps.restJaar)}
+      ${gpsBlok('🔄 Komende 12 maanden (zelfde doel)', gps.rolling)}
+    </div>`;
+  })();
+
   root.innerHTML = `
     <div class="spread mb"><h1>Cashflow & toekomst</h1>
       <div class="row">
         <button class="btn" id="cfCsv">📄 Bank-CSV importeren</button>
         <button class="btn primary" id="cfSaldo">🏦 Saldo bijwerken</button>
       </div></div>
+
+    <div class="panel mb"><div class="spread mb"><h2>🎯 Jaardoel-GPS ${uitlegChip('gps')}</h2>
+      <span class="row" style="gap:8px;align-items:center"><label style="margin:0">Doelwinst ${jaarNu} (€)</label>
+      <input id="gps_doel" type="number" step="5000" min="0" value="${gps.doel ?? ''}" placeholder="bijv. 150000" style="width:120px"></span></div>
+      ${gpsHtml}</div>
 
     <div id="cfDyn">${cfDynHtml(sc)}</div>
 
@@ -436,7 +504,9 @@ function renderCashflow(root) {
           <input type="checkbox" id="sc_afl" ${sc.aflossenAan ? 'checked' : ''} style="width:auto;justify-self:start"><span></span></div>
         <p class="muted">Wat-als (tijdelijk). Tempo × gem. fee (${eur(proj.gemFee)}) × blijfkans = nieuwe omzet per maand. Fase-kansen stel je in bij Instellingen.</p>
       </div>
-      <div class="panel"><h2>🏛 Lening ${lening ? '· ' + esc(lening.naam) : ''} ${uitlegChip('lening')}</h2>
+      <div>
+        <div class="panel mb"><h2>💰 Uitkeer-planner ${uitlegChip('uitkeer')}</h2><div id="ukDyn">${ukHtml()}</div></div>
+        <div class="panel"><h2>🏛 Lening ${lening ? '· ' + esc(lening.naam) : ''} ${uitlegChip('lening')}</h2>
         ${lening ? `
         <div class="pot"><span>Hoofdsom</span><b>${eur(lening.hoofdsom)}</b></div>
         <div class="pot"><span>Rente</span><b>${lening.rente_pct}%</b></div>
@@ -445,6 +515,7 @@ function renderCashflow(root) {
         <div class="pot"><span>Deadline</span><b>${fmtD(lening.deadline)}</b></div>
         ${D.loanPayments.filter(l => l.gepland).map(l => `<div class="pot"><span>Gepland: ${fmtD(l.datum)}</span><b>${eur(l.bedrag)} <button class="btn small" data-lp="${l.id}">Betaald ✓</button></b></div>`).join('')}
         ` : '<div class="empty">Geen lening geregistreerd.</div>'}
+        </div>
       </div>
     </div>
 
@@ -479,6 +550,8 @@ function renderCashflow(root) {
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
     $('#scv_hire').textContent = eur(sc.extraHirePm);
   };
+  $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Jaardoel opgeslagen ✓'); rerender(); };
+  wireUitkeer();
   $('#sc_load').onchange = e => cfLoadScenario(e.target.value);
   $('#sc_save').onclick = openSaveScenario;
   $('#sc_star').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een opgeslagen scenario', true); cfSetDefaultScenario(n); };

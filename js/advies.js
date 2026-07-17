@@ -256,6 +256,22 @@ function renderAdvies(root) {
       <div class="table-wrap"><table>
       ${cijfers.map(([l, v, s]) => `<tr><td>${esc(l)}</td><td class="num"><b>${esc(v)}</b></td><td class="muted">${esc(s)}</td></tr>`).join('')}
       </table></div></div>
+    ${(() => {
+      const ta = tariefAdvies();
+      if (!ta.rows.length) return '';
+      const topPot = ta.rows[0];
+      return `<div class="panel mb"><h2>🏷 Tarief-adviseur <span class="muted">— wat levert elke klant echt op</span> ${uitlegChip('a_tarief')}</h2>
+      <div class="table-wrap"><table>
+      <tr><th>Klant</th><th class="num">Plaatsingen ${todayISO().slice(0, 4)}</th><th class="num">Netto omzet</th><th class="num">Tarief</th><th class="num">Jouw gemiddelde</th><th class="num">Rek (op jaarbasis)</th></tr>
+      ${ta.rows.map(r => `<tr><td>${esc(r.klant)}${r.gestopt ? ` <span class="tag red">${r.gestopt}× gestopt</span>` : ''}</td>
+        <td class="num">${r.n}</td><td class="num">${eur(r.netto)}</td>
+        <td class="num">${r.pct ? `<b>${(r.pct * 100).toFixed(1)}%</b>` : '<span class="tag amber">geen tarief ✎</span>'}</td>
+        <td class="num muted">${ta.bench ? (ta.bench * 100).toFixed(1) + '%' : '—'}</td>
+        <td class="num">${r.potentie > 500 ? `<b style="color:var(--amber)">+${eur(r.potentie)}</b>` : r.pct ? '<span class="muted">marktconform</span>' : '—'}</td></tr>`).join('')}
+      </table></div>
+      ${topPot && topPot.potentie > 500 ? `<p class="mt">👉 <b>${esc(topPot.klant)}</b> zit op ${(topPot.pct * 100).toFixed(1)}% waar je gewogen gemiddelde ${(ta.bench * 100).toFixed(1)}% is — naar het gemiddelde is dat <b>~${eur(topPot.potentie)} per jaar</b> bij gelijk volume. Neem het mee in het volgende contractgesprek.</p>` : '<p class="muted mt">Geen klant zit noemenswaardig onder je gemiddelde tarief — netjes.</p>'}
+      </div>`;
+    })()}
     ${sectie('gevaar', '🔴 Gevaren')}
     ${sectie('kans', '🟡 Kansen')}
     ${sectie('sterkte', '🟢 Sterktes')}
