@@ -29,7 +29,7 @@ function renderVandaag(root) {
   const actieHtml = lijst.length ? lijst.map((a, idx) => {
     const wie = a.p ? `${esc(a.p.kandidaat)} · ${esc(a.p.klant)}` : (a.c ? `${esc(a.c.naam)} · ${esc(a.c.klant || '')}` : 'Algemeen');
     const bedrag = a.i ? ` · ${eur(a.i.bedrag_excl)} excl. btw` : '';
-    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢', concept: '✨' }[a.soort] || '•';
+    const ico = { factureren: '🧾', te_laat: '⏰', vervanging: '🔁', stop: '✂️', afronden: '📥', stop_signaal: '🛑', saldo: '🏦', flex: '🟢', concept: '✨', terug: '↩️' }[a.soort] || '•';
     let btn = '';
     if (a.soort === 'factureren') btn = `<button class="btn small primary" data-act="factureer" data-idx="${idx}">Gefactureerd ✓</button>`;
     if (a.soort === 'te_laat') btn = `<button class="btn small primary" data-act="betaald" data-idx="${idx}">Betaald ✓</button>`;
@@ -40,6 +40,7 @@ function renderVandaag(root) {
     if (a.soort === 'flex') btn = `<button class="btn small primary" data-act="flexin">Invullen →</button>`;
     if (a.soort === 'concept') btn = `<button class="btn small primary" data-act="openpl" data-pid="${esc(a.p.id)}">Controleren →</button>`;
     if (a.soort === 'vervanging') btn = `<button class="btn small" data-act="openpl" data-pid="${esc(a.p.id)}">Bekijk</button>`;
+    if (a.soort === 'terug') btn = `<button class="btn small" data-act="openpl" data-pid="${esc(a.p.id)}">Bekijk</button>`;
     return `<div class="actie ${a.urg === 2 ? 'urgent' : 'warn'}">
       <div class="ico">${ico}</div>
       <div class="body"><b>${esc(a.txt)}</b><span>${wie}${bedrag}</span></div>${btn}</div>`;

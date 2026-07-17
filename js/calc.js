@@ -56,8 +56,10 @@ function inboxCandidates() {
   // ("Henri" vs "Henri B.V"), dus we matchen op kandidaatnaam alleen
   const byName = new Set(D.placements.map(p => (p.kandidaat || '').trim().toLowerCase()).filter(Boolean));
   return D.candidates.filter(c =>
-    (PLACED_FASES.includes(c.fase) || c.geplaatst_op) &&
-    c.fase !== 'Afgevallen' &&
+    // Plaatsing PAS aanmaken als de kandidaat NU op "Contract getekend"/"Gestart" staat.
+    // (Of terecht daarna gestopt.) Een verouderde geplaatst_op bij een teruggezette
+    // kandidaat (bijv. terug naar Offer) telt NIET — anders ontstaan spookplaatsingen.
+    (PLACED_FASES.includes(c.fase) || (c.geplaatst_op && c.fase === 'Gestopt')) &&
     !isFlexType(c.type) &&                        // flex loopt via Pronkert, niet via W&S-facturatie
     !(c.vervangt || '') &&                        // garantievervangers zijn geen nieuwe fee
     !linked.has(c.id) && !dismissed.has(c.id) &&
@@ -103,6 +105,13 @@ function acties() {
     if (g.vervangingNodig) list.push({ soort: 'vervanging', urg: 2, p, txt: `Vervanging leveren — gestopt ${fmtD(p.gestopt_op)} binnen garantie` });
     const si = stopImpact(p);
     if (si.length) list.push({ soort: 'stop', urg: 1, p, txt: `${si.length} termijn(en) laten vervallen na stop (${eur(si.reduce((s, i) => s + +i.bedrag_excl, 0))})` });
+    // teruggezet op het bord (vóór getekend) maar al gefactureerd → niet auto-verwijderd, hand nodig
+    if (p.pipeline_candidate_id) {
+      const cc = D.candidates.find(x => x.id === p.pipeline_candidate_id);
+      const st2 = placementStats(p);
+      if (cc && !['Contract getekend', 'Gestart', 'Gestopt'].includes(cc.fase) && (st2.gefact > 0 || st2.betaald > 0))
+        list.push({ soort: 'terug', urg: 2, p, txt: `${p.kandidaat} staat op het bord terug op "${cc.fase}" (niet meer getekend), maar er is al gefactureerd — controleer` });
+    }
   }
   for (const c of inboxCandidates())
     list.push({ soort: 'afronden', urg: 1, c, txt: `${c.naam} (${c.klant || '?'}) — plaatsing afronden` });
@@ -332,6 +341,29 @@ async function autoStopFromBoard() {
       await dbWrite('fin_installments', t => t.update({ status: 'vervallen' }).eq('id', i.id));
     await reload('fin_installments', 'installments', 'geplande_datum');
     toast(`${n} plaatsing(en) automatisch naar gestopt (bord)`);
+  }
+  return n;
+}
+
+// Kandidaat is op het bord teruggezet vóór "Contract getekend" (bijv. per ongeluk
+// getekend en weer naar Offer/gesprek) → de plaatsing hoort niet te bestaan en gaat terug.
+// Alleen veilig als er nog niets gefactureerd is; anders komt het als actie (zie acties()).
+async function autoReverseFromBoard() {
+  const geldig = ['Contract getekend', 'Gestart', 'Gestopt'];   // Gestopt = terecht geplaatst-en-gestopt, blijft staan
+  let n = 0;
+  for (const p of D.placements) {
+    if (!p.pipeline_candidate_id) continue;
+    const c = D.candidates.find(x => x.id === p.pipeline_candidate_id);
+    if (!c || geldig.includes(c.fase)) continue;
+    const st = placementStats(p);
+    if (st.gefact > 0 || st.betaald > 0) continue;              // al gefactureerd → niet stil verwijderen
+    await dbWrite('fin_installments', t => t.delete().eq('placement_id', p.id));
+    await dbWrite('fin_placements', t => t.delete().eq('id', p.id));
+    n++;
+  }
+  if (n) {
+    await Promise.all([reload('fin_placements', 'placements', 'id'), reload('fin_installments', 'installments', 'geplande_datum')]);
+    toast(`${n} plaatsing(en) teruggedraaid — staat op het bord niet meer op "Contract getekend"`);
   }
   return n;
 }

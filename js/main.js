@@ -44,6 +44,7 @@ async function startApp() {
     await autoCreatePlacements();       // W&S: contract getekend → automatisch plaatsing (concept)
     await autoCreateFlexPlacements();   // Flex: contract getekend → automatisch flexkracht (concept)
     await autoStopFromBoard();          // gestopt op het bord → plaatsing automatisch naar gestopt
+    await autoReverseFromBoard();       // teruggezet vóór "Contract getekend" → plaatsing terugdraaien
     $('#syncDot').classList.remove('err');
     // Yuki dagvers houden: max 1× per 20 uur, op de achtergrond
     const ts = S('yuki_synced_at');
@@ -137,6 +138,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (document.visibilityState !== 'visible') return;
     if ($('#app').style.display === 'none' || !lastLoadTs) return;
     if (Date.now() - lastLoadTs < 5 * 60 * 1000) return;
-    try { await loadAll(); await autoCreatePlacements(); await autoCreateFlexPlacements(); await autoStopFromBoard(); rerender(); } catch (e) { $('#syncDot').classList.add('err'); }
+    try { await loadAll(); await autoCreatePlacements(); await autoCreateFlexPlacements(); await autoStopFromBoard(); await autoReverseFromBoard(); rerender(); } catch (e) { $('#syncDot').classList.add('err'); }
   });
 });
