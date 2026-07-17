@@ -52,7 +52,7 @@ function renderFlex(root) {
       <tr><th>Week</th><th class="num">Marge excl. btw</th><th class="num">Flexkrachten</th><th>Notitie</th><th></th></tr>
       ${rows || '<tr><td colspan="5" class="empty">Nog geen weken ingevoerd. Zodra de eerste uitbetaling van Pronkert binnen is: invoeren maar.</td></tr>'}
       </table></div>
-      <p class="muted mt">Vul het uitgekeerde bedrag excl. btw in. De cashflow-projectie rekent met het gemiddelde van je laatste 4 weken; op Cashflow kun je met de flex-schuif spelen (groei of wegval).</p></div>`;
+      <p class="muted mt">Import via 📄 vult dit automatisch (excl. btw). Let op: Sven wordt wekelijks gefactureerd, Alain per 4 weken — zijn maandfactuur wordt bij import automatisch over de juiste weken uitgesplitst, dus recente weken kunnen tijdelijk lager lijken tot die factuur binnen is. De cashflow rekent met het gemiddelde van de laatste 4 weken.</p></div>`;
 
   $('#fxNieuw').onclick = () => openFlexModal();
   $('#fxPdf').onclick = () => openFlexPdfImport();

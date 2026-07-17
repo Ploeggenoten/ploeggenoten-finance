@@ -121,13 +121,13 @@ function acties() {
   if (!saldo || daysBetween(saldo.datum, t) > 14)
     list.push({ soort: 'saldo', urg: 1, txt: saldo ? `Banksaldo ${daysBetween(saldo.datum, t)} dgn oud — werk bij` : 'Vul je banksaldo in' });
   // (gefactureerd/betaald worden automatisch uit Yuki bijgewerkt tijdens de sync)
-  // flex-bewaking: vorige week (ma t/m zo voorbij) nog niet ingevuld?
+  // flex-bewaking: te lang geen marge geïmporteerd? (Sven wekelijks; Alain per 4 weken gefactureerd,
+  // dus een gat van 1-2 weken is normaal — pas na 3 weken stilte waarschuwen)
   if (D.flex.length) {
-    const dag = (new Date(t + 'T12:00:00').getDay() + 6) % 7;      // ma=0
-    const maDezeWeek = addDays(t, -dag);
-    const maVorigeWeek = addDays(maDezeWeek, -7);
-    if (!D.flex.some(w => w.week === maVorigeWeek))
-      list.push({ soort: 'flex', urg: 1, txt: `Flex-week van ${fmtD(maVorigeWeek)} nog niet ingevuld (Pronkert)` });
+    const laatste = D.flex.reduce((a, w) => w.week > a ? w.week : a, '');
+    const dgn = laatste ? daysBetween(laatste, t) : 999;
+    if (dgn > 21)
+      list.push({ soort: 'flex', urg: 1, txt: `Al ${Math.floor(dgn / 7)} weken geen flex-marge geïmporteerd — check de Pronkert-facturen (📄 op de Flex-tab)` });
   }
   return list.sort((a, b) => b.urg - a.urg);
 }
