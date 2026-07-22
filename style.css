@@ -165,7 +165,9 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
 
 /* conversie-keten */
 .ketrij { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-.ketstap { flex: 1 1 120px; background: var(--panel2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; text-align: center; }
+.ketstap { flex: 1 1 120px; background: var(--panel2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; text-align: center; font: inherit; color: inherit; cursor: pointer; transition: border-color .12s; }
+.ketstap:hover { border-color: var(--accent); }
+.ketstap.aan { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .ketstap .kn { font-family: var(--display); font-size: 28px; letter-spacing: .5px; }
 .ketstap .kl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; line-height: 1.35; }
 .ketpijl { align-self: center; font-weight: 700; color: var(--accent); font-size: 14px; white-space: nowrap; }

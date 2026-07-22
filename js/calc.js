@@ -464,10 +464,18 @@ function conversieKeten(filter = {}) {
     return !!(ref && g && c.gestopt_op > addMonths(ref, g));
   }).length;
   const r = (a, b) => b > 0 ? a / b : null;
+  const isOffer = c => furthestIdx(c) >= idxO || c.afval_type === 'offer_afgewezen' || reachedPlacement(c);
   return { voorstellen, offers, plaats, blijft, duurzaam,
     voorPerOffer: r(voorstellen, offers), offerPerPlaatsing: r(offers, plaats),
     voorPerPlaatsing: r(voorstellen, plaats), voorPerBlijver: r(voorstellen, blijft),
-    pctOffer: r(offers, voorstellen), pctPlaats: r(plaats, offers), pctBlijft: r(blijft, plaats), pctDuurzaam: r(duurzaam, plaats) };
+    pctOffer: r(offers, voorstellen), pctPlaats: r(plaats, offers), pctBlijft: r(blijft, plaats), pctDuurzaam: r(duurzaam, plaats),
+    // namenlijsten voor drill-down
+    lijsten: {
+      voorstellen: resolved,
+      offers: resolved.filter(isOffer),
+      plaats: geplaatst,
+      blijft: geplaatst.filter(c => !c.gestopt_op),
+    } };
 }
 
 // ── jaardoel-GPS: van winstdoel terug naar benodigde plaatsingen ──

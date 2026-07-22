@@ -409,7 +409,7 @@ function wireUitkeer() {
 }
 
 // ── conversie-keten: overzichtelijk + filterbaar per klant/recruiter ──
-let _ketK = '', _ketR = '';
+let _ketK = '', _ketR = '', _ketStap = '';
 function ketenHtml() {
   const alleRes = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') && isResolvedCand(c));
   if (!alleRes.length) return '<div class="empty">Nog geen afgeronde trajecten op het bord.</div>';
@@ -436,22 +436,39 @@ function ketenHtml() {
       ${kaart(f1(ck.voorPerBlijver), 'Voorstellen per blijvende plaatsing', `duurzaam (tijd afgemaakt): ${ck.duurzaam} van ${ck.plaats} (${p(ck.pctDuurzaam)})`, 'good')}
     </div>
     <div class="ketrij">
-      <div class="ketstap"><div class="kn">${ck.voorstellen}</div><div class="kl">voorgesteld<br>(in procedure)</div></div>
+      <button class="ketstap ${_ketStap === 'voorstellen' ? 'aan' : ''}" data-stap="voorstellen"><div class="kn">${ck.voorstellen}</div><div class="kl">voorgesteld<br>(in procedure)</div></button>
       <div class="ketpijl">→ ${p(ck.pctOffer)}</div>
-      <div class="ketstap"><div class="kn">${ck.offers}</div><div class="kl">offer-stadium<br>bereikt</div></div>
+      <button class="ketstap ${_ketStap === 'offers' ? 'aan' : ''}" data-stap="offers"><div class="kn">${ck.offers}</div><div class="kl">offer-stadium<br>bereikt</div></button>
       <div class="ketpijl">→ ${p(ck.pctPlaats)}</div>
-      <div class="ketstap"><div class="kn">${ck.plaats}</div><div class="kl">plaatsing<br>(getekend)</div></div>
+      <button class="ketstap ${_ketStap === 'plaats' ? 'aan' : ''}" data-stap="plaats"><div class="kn">${ck.plaats}</div><div class="kl">plaatsing<br>(getekend)</div></button>
       <div class="ketpijl">→ ${p(ck.pctBlijft)}</div>
-      <div class="ketstap"><div class="kn">${ck.blijft}</div><div class="kl">blijft<br>(niet gestopt)</div></div>
+      <button class="ketstap ${_ketStap === 'blijft' ? 'aan' : ''}" data-stap="blijft"><div class="kn">${ck.blijft}</div><div class="kl">blijft<br>(niet gestopt)</div></button>
     </div>
+    ${_ketStap && ck.lijsten[_ketStap] ? (() => {
+      const titelMap = { voorstellen: 'Voorgesteld (in procedure genomen)', offers: 'Offer-stadium bereikt', plaats: 'Plaatsing (getekend)', blijft: 'Blijft (niet gestopt)' };
+      const status = c => {
+        if (c.geplaatst_op || ['Contract getekend', 'Gestart'].includes(c.fase)) {
+          if (c.fase === 'Gestopt' || c.gestopt_op) return tag(`🛑 gestopt${c.stop_categorie ? ' · ' + c.stop_categorie : ''}`, 'red');
+          return tag('✓ geplaatst' + (c.fase === 'Gestart' ? ' · gestart' : ''), 'green');
+        }
+        if (c.afval_type === 'offer_afgewezen') return tag(`💔 offer afgewezen${c.afval_categorie ? ' · ' + c.afval_categorie : ''}`, 'amber');
+        return tag(`afgevallen${c.afval_categorie ? ' · ' + c.afval_categorie : ''}`, 'gray');
+      };
+      const rows = ck.lijsten[_ketStap].slice().sort((a, b) => (a.klant || '').localeCompare(b.klant || '') || (a.naam || '').localeCompare(b.naam || ''))
+        .map(c => `<tr><td><b>${esc(c.naam)}</b></td><td>${esc(c.klant || '—')}</td><td>${esc(c.functie || '—')}</td><td>${esc((c.rec || '').trim() || '—')}</td><td>${status(c)}</td></tr>`).join('');
+      return `<div class="mt table-wrap"><h3 style="margin:0 0 6px">${titelMap[_ketStap]} — ${ck.lijsten[_ketStap].length} ${_ketK || _ketR ? '(gefilterd)' : ''}</h3>
+        <table><tr><th>Kandidaat</th><th>Klant</th><th>Functie</th><th>Recruiter</th><th>Uitkomst</th></tr>${rows || '<tr><td colspan="5" class="empty">Niemand in deze stap.</td></tr>'}</table></div>`;
+    })() : `<p class="muted mt" style="font-size:12.5px">Klik op een stap voor de namen.</p>`}
     ${nodigPm != null ? `<p class="mt" style="font-size:14.5px">🎯 Voor je doel (<b>${f1(nodigPm)} plaatsingen/mnd</b>) betekent dit: <b>${f1(nodigPm * (ck.offerPerPlaatsing || 0))} offers</b> en <b style="color:var(--accent)">${f1(nodigPm * (ck.voorPerPlaatsing || 0))} voorstellen per maand</b>.</p>` : ''}
     <p class="muted mt">${(_ketK || _ketR) ? 'Let op: kleine aantallen per klant/recruiter geven grove percentages — kijk naar de verhouding, niet de decimalen. ' : ''}Offer-stadium = ooit In de wacht/Offer/Contract ondertekenen bereikt. Wordt scherper naarmate de fase-historie van het bord vult.</p>`;
 }
 function wireKeten() {
   const wrap = $('#ketDyn'); if (!wrap) return;
+  const her = () => { wrap.innerHTML = ketenHtml(); wireKeten(); };
   const k = wrap.querySelector('#ket_klant'), r = wrap.querySelector('#ket_rec');
-  if (k) k.onchange = e => { _ketK = e.target.value; wrap.innerHTML = ketenHtml(); wireKeten(); };
-  if (r) r.onchange = e => { _ketR = e.target.value; wrap.innerHTML = ketenHtml(); wireKeten(); };
+  if (k) k.onchange = e => { _ketK = e.target.value; her(); };
+  if (r) r.onchange = e => { _ketR = e.target.value; her(); };
+  wrap.querySelectorAll('.ketstap').forEach(b => b.onclick = () => { _ketStap = _ketStap === b.dataset.stap ? '' : b.dataset.stap; her(); });
 }
 
 // ── hoofdview ──────────────────────────────────────────────────
