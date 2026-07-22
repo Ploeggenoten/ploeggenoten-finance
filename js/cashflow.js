@@ -68,6 +68,10 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> hoeveel plaatsingen per maand je nodig hebt om je kosten te dekken. Elke plaatsing daarboven is winst.</p>
     <p><b>Hoe berekend:</b> (gemiddelde maandkosten − doorlopende flex-marge) ÷ (gemiddelde fee × blijfkans). Dus flex verlaagt je break-even, want die dekt al een deel van de kosten.</p>
     <p><b>Hoe sturen:</b> zet dit naast je target. Zit je target ruim boven break-even, dan bouw je buffer op; zit je eronder, dan teer je in.</p>` },
+  keten: { t: '🔗 Conversie-keten', h: `
+    <p><b>Wat je ziet:</b> hoeveel voorstellen er nodig zijn voor één offer, hoeveel offers voor één plaatsing, en hoeveel plaatsingen er blijven — plus wie z'n tijd echt afmaakt (garantie voltooid).</p>
+    <p><b>Hoe berekend:</b> uit je afgeronde trajecten op het bord (fase-historie + uitval-registratie). Offer-stadium = ooit In de wacht, Offer of Contract ondertekenen bereikt. Rechts wordt je jaardoel omgerekend naar benodigde offers en voorstellen per maand.</p>
+    <p><b>Hoe sturen:</b> dit zijn je activiteitsdoelen: het aantal voorstellen per maand is de knop waar je als eerste aan draait. Zakt de conversie ergens, dan zie je in het Uitval-tabblad van het bord meteen waaróm (redenen per stap).</p>` },
   maandtabel: { t: '📋 Maandtabel', h: `
     <p><b>Wat je ziet:</b> de cijfers onder de grafiek — maand voor maand in en uit.</p>
     <p><b>Hoe berekend:</b> in = facturen (op verwachte betaaldatum) + flex + scenario-omzet; uit = kosten + btw-afdracht + aflossing.</p>
@@ -531,6 +535,40 @@ function renderCashflow(root) {
       </table></div>
       <p class="muted mt">Kans per fase: voorgesteld 5% · O&O 10% · 1e gesprek 20% · 2e gesprek 40% · meeloopdag 50% · in de wacht 50% · offer 65% · ondertekenen 75% <span class="muted">(Voorselectie telt niet mee)</span>. <b>Bruto</b> = kans × fee (echte fee waar het bord een maandloon heeft; <b>~</b> = gemiddelde). <b>Netto</b> = na verwachte uitval — die <b>leert de app uit je eigen stops</b> (nu blijft <b>${Math.round(pf.behoud * 100)}%</b>). De projectie rekent met netto. Een plaatsing telt pas vanaf "Contract getekend".</p>`
       : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
+
+    ${(() => {
+      const ck = conversieKeten();
+      if (!ck.voorstellen) return '';
+      const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toLocaleString('nl-NL');
+      const p = x => x == null ? '—' : Math.round(x * 100) + '%';
+      const stap = (lbl, n, pctTxt) => `<div class="ketstap"><div class="kn">${n}</div><div class="kl">${lbl}</div>${pctTxt ? `<div class="kp">${pctTxt}</div>` : ''}</div>`;
+      const nodigPm = gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null ? gps.restJaar.perMnd : null;
+      return `<div class="panel mb"><h2>🔗 Conversie-keten <span class="muted">— van voorstel tot blijvende plaatsing</span> ${uitlegChip('keten')}</h2>
+      <div class="ketrij">
+        ${stap('voorgesteld<br>(in procedure)', ck.voorstellen, '')}
+        <div class="ketpijl">→ ${p(ck.pctOffer)}</div>
+        ${stap('offer-stadium<br>bereikt', ck.offers, '')}
+        <div class="ketpijl">→ ${p(ck.pctPlaats)}</div>
+        ${stap('plaatsing<br>(getekend)', ck.plaats, '')}
+        <div class="ketpijl">→ ${p(ck.pctBlijft)}</div>
+        ${stap('blijft<br>(niet gestopt)', ck.blijft, '')}
+      </div>
+      <div class="grid cols-2 mt">
+        <div>
+          <div class="pot"><span>1 plaatsing kost je</span><b>${f1(ck.voorPerPlaatsing)} voorstellen · ${f1(ck.offerPerPlaatsing)} offers</b></div>
+          <div class="pot"><span>1 blijvende plaatsing kost je</span><b>${f1(ck.voorPerBlijver)} voorstellen</b></div>
+          <div class="pot"><span>Duurzaam (tijd afgemaakt / garantie voltooid)</span><b>${ck.duurzaam} van ${ck.plaats} (${p(ck.pctDuurzaam)})</b></div>
+        </div>
+        <div>${nodigPm != null ? `
+          <div class="pot"><span>Voor je doel (${f1(nodigPm)} plaatsingen/mnd) nodig:</span><b>&nbsp;</b></div>
+          <div class="pot"><span>→ offers per maand</span><b>${f1(nodigPm * (ck.offerPerPlaatsing || 0))}</b></div>
+          <div class="pot"><span>→ voorstellen per maand</span><b style="color:var(--accent)">${f1(nodigPm * (ck.voorPerPlaatsing || 0))}</b></div>`
+          : '<div class="pot"><span>Vul je jaardoel in (🎯 boven) en dit rekent om naar benodigde offers en voorstellen per maand.</span></div>'}
+        </div>
+      </div>
+      <p class="muted mt">Gebaseerd op je afgeronde trajecten van het bord (${ck.voorstellen} kandidaten). Offer-stadium = ooit In de wacht/Offer/Contract ondertekenen bereikt. De keten wordt vanzelf scherper naarmate het bord langer fase-historie vastlegt.</p>
+      </div>`;
+    })()}
 
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>
 

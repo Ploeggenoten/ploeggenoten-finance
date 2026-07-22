@@ -445,6 +445,29 @@ function breakEven() {
   return { kostPm, flexPm, perPlaatsing, gemFee, behoud, nodig };
 }
 
+// ── conversie-keten: voorstel → offer → plaatsing → blijver ─────
+// Gebaseerd op afgeronde trajecten (bord): hoeveel heb je er van elk nodig?
+function conversieKeten() {
+  const resolved = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') && isResolvedCand(c));
+  const idxO = FUNNEL.indexOf('In de wacht');           // offer-stadium = In de wacht/Offer/ondertekenen of verder
+  const voorstellen = resolved.length;                  // in procedure genomen (voorgesteld)
+  const offers = resolved.filter(c => furthestIdx(c) >= idxO || c.afval_type === 'offer_afgewezen' || reachedPlacement(c)).length;
+  const geplaatst = resolved.filter(reachedPlacement);
+  const plaats = geplaatst.length;
+  const blijft = geplaatst.filter(c => !c.gestopt_op).length;
+  // duurzaam = niet gestopt, óf pas gestopt ná de garantieperiode (fee volledig verdiend)
+  const duurzaam = geplaatst.filter(c => {
+    if (!c.gestopt_op) return true;
+    const ref = c.start || c.geplaatst_op, g = Number(c.garantie_mnd) || 0;
+    return !!(ref && g && c.gestopt_op > addMonths(ref, g));
+  }).length;
+  const r = (a, b) => b > 0 ? a / b : null;
+  return { voorstellen, offers, plaats, blijft, duurzaam,
+    voorPerOffer: r(voorstellen, offers), offerPerPlaatsing: r(offers, plaats),
+    voorPerPlaatsing: r(voorstellen, plaats), voorPerBlijver: r(voorstellen, blijft),
+    pctOffer: r(offers, voorstellen), pctPlaats: r(plaats, offers), pctBlijft: r(blijft, plaats), pctDuurzaam: r(duurzaam, plaats) };
+}
+
 // ── jaardoel-GPS: van winstdoel terug naar benodigde plaatsingen ──
 function jaardoelGps() {
   const doel = Number(S('doel_winst_jaar', 0)) || null;
