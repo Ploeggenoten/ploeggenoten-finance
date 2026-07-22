@@ -408,6 +408,52 @@ function wireUitkeer() {
   wrap.querySelector('#uk_buffer').oninput = e => { $('#ukv_buffer').textContent = eur(+e.target.value); };
 }
 
+// ── conversie-keten: overzichtelijk + filterbaar per klant/recruiter ──
+let _ketK = '', _ketR = '';
+function ketenHtml() {
+  const alleRes = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') && isResolvedCand(c));
+  if (!alleRes.length) return '<div class="empty">Nog geen afgeronde trajecten op het bord.</div>';
+  const klanten = [...new Set(alleRes.map(c => c.klant).filter(Boolean))].sort();
+  const recs = [...new Set(alleRes.map(c => (c.rec || '').trim()).filter(Boolean))].sort();
+  if (_ketK && !klanten.includes(_ketK)) _ketK = '';
+  if (_ketR && !recs.includes(_ketR)) _ketR = '';
+  const ck = conversieKeten({ klant: _ketK, rec: _ketR });
+  const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toLocaleString('nl-NL');
+  const p = x => x == null ? '—' : Math.round(x * 100) + '%';
+  const kaart = (val, lbl, sub, kleur) => `<div class="kpi ${kleur || ''}"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+  const gps = (!_ketK && !_ketR) ? jaardoelGps() : null;
+  const nodigPm = gps && gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null ? gps.restJaar.perMnd : null;
+  return `
+    <div class="row mb" style="gap:10px;flex-wrap:wrap">
+      <select id="ket_klant"><option value="">Alle klanten</option>${klanten.map(k => `<option ${k === _ketK ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select>
+      <select id="ket_rec"><option value="">Alle recruiters</option>${recs.map(r => `<option ${r === _ketR ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select>
+      ${(_ketK || _ketR) ? `<span class="tag amber">gefilterd · ${ck.voorstellen} trajecten</span>` : `<span class="muted" style="align-self:center">${ck.voorstellen} afgeronde trajecten</span>`}
+    </div>
+    <div class="grid cols-4 mb">
+      ${kaart(`${f1(ck.voorPerOffer)} <span style="font-size:.55em">→ 1</span>`, 'Voorstellen → 1 offer', `${ck.offers} van ${ck.voorstellen} halen het offer-stadium (${p(ck.pctOffer)})`)}
+      ${kaart(`${f1(ck.offerPerPlaatsing)} <span style="font-size:.55em">→ 1</span>`, 'Offers → 1 plaatsing', `${ck.plaats} van ${ck.offers} tekenen (${p(ck.pctPlaats)})`)}
+      ${kaart(`${ck.blijft && ck.plaats ? f1(ck.plaats / ck.blijft) : '—'} <span style="font-size:.55em">→ 1</span>`, 'Plaatsingen → 1 blijver', `${ck.blijft} van ${ck.plaats} blijven (${p(ck.pctBlijft)})`)}
+      ${kaart(f1(ck.voorPerBlijver), 'Voorstellen per blijvende plaatsing', `duurzaam (tijd afgemaakt): ${ck.duurzaam} van ${ck.plaats} (${p(ck.pctDuurzaam)})`, 'good')}
+    </div>
+    <div class="ketrij">
+      <div class="ketstap"><div class="kn">${ck.voorstellen}</div><div class="kl">voorgesteld<br>(in procedure)</div></div>
+      <div class="ketpijl">→ ${p(ck.pctOffer)}</div>
+      <div class="ketstap"><div class="kn">${ck.offers}</div><div class="kl">offer-stadium<br>bereikt</div></div>
+      <div class="ketpijl">→ ${p(ck.pctPlaats)}</div>
+      <div class="ketstap"><div class="kn">${ck.plaats}</div><div class="kl">plaatsing<br>(getekend)</div></div>
+      <div class="ketpijl">→ ${p(ck.pctBlijft)}</div>
+      <div class="ketstap"><div class="kn">${ck.blijft}</div><div class="kl">blijft<br>(niet gestopt)</div></div>
+    </div>
+    ${nodigPm != null ? `<p class="mt" style="font-size:14.5px">🎯 Voor je doel (<b>${f1(nodigPm)} plaatsingen/mnd</b>) betekent dit: <b>${f1(nodigPm * (ck.offerPerPlaatsing || 0))} offers</b> en <b style="color:var(--accent)">${f1(nodigPm * (ck.voorPerPlaatsing || 0))} voorstellen per maand</b>.</p>` : ''}
+    <p class="muted mt">${(_ketK || _ketR) ? 'Let op: kleine aantallen per klant/recruiter geven grove percentages — kijk naar de verhouding, niet de decimalen. ' : ''}Offer-stadium = ooit In de wacht/Offer/Contract ondertekenen bereikt. Wordt scherper naarmate de fase-historie van het bord vult.</p>`;
+}
+function wireKeten() {
+  const wrap = $('#ketDyn'); if (!wrap) return;
+  const k = wrap.querySelector('#ket_klant'), r = wrap.querySelector('#ket_rec');
+  if (k) k.onchange = e => { _ketK = e.target.value; wrap.innerHTML = ketenHtml(); wireKeten(); };
+  if (r) r.onchange = e => { _ketR = e.target.value; wrap.innerHTML = ketenHtml(); wireKeten(); };
+}
+
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
@@ -536,39 +582,8 @@ function renderCashflow(root) {
       <p class="muted mt">Kans per fase: voorgesteld 5% · O&O 10% · 1e gesprek 20% · 2e gesprek 40% · meeloopdag 50% · in de wacht 50% · offer 65% · ondertekenen 75% <span class="muted">(Voorselectie telt niet mee)</span>. <b>Bruto</b> = kans × fee (echte fee waar het bord een maandloon heeft; <b>~</b> = gemiddelde). <b>Netto</b> = na verwachte uitval — die <b>leert de app uit je eigen stops</b> (nu blijft <b>${Math.round(pf.behoud * 100)}%</b>). De projectie rekent met netto. Een plaatsing telt pas vanaf "Contract getekend".</p>`
       : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
 
-    ${(() => {
-      const ck = conversieKeten();
-      if (!ck.voorstellen) return '';
-      const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toLocaleString('nl-NL');
-      const p = x => x == null ? '—' : Math.round(x * 100) + '%';
-      const stap = (lbl, n, pctTxt) => `<div class="ketstap"><div class="kn">${n}</div><div class="kl">${lbl}</div>${pctTxt ? `<div class="kp">${pctTxt}</div>` : ''}</div>`;
-      const nodigPm = gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null ? gps.restJaar.perMnd : null;
-      return `<div class="panel mb"><h2>🔗 Conversie-keten <span class="muted">— van voorstel tot blijvende plaatsing</span> ${uitlegChip('keten')}</h2>
-      <div class="ketrij">
-        ${stap('voorgesteld<br>(in procedure)', ck.voorstellen, '')}
-        <div class="ketpijl">→ ${p(ck.pctOffer)}</div>
-        ${stap('offer-stadium<br>bereikt', ck.offers, '')}
-        <div class="ketpijl">→ ${p(ck.pctPlaats)}</div>
-        ${stap('plaatsing<br>(getekend)', ck.plaats, '')}
-        <div class="ketpijl">→ ${p(ck.pctBlijft)}</div>
-        ${stap('blijft<br>(niet gestopt)', ck.blijft, '')}
-      </div>
-      <div class="grid cols-2 mt">
-        <div>
-          <div class="pot"><span>1 plaatsing kost je</span><b>${f1(ck.voorPerPlaatsing)} voorstellen · ${f1(ck.offerPerPlaatsing)} offers</b></div>
-          <div class="pot"><span>1 blijvende plaatsing kost je</span><b>${f1(ck.voorPerBlijver)} voorstellen</b></div>
-          <div class="pot"><span>Duurzaam (tijd afgemaakt / garantie voltooid)</span><b>${ck.duurzaam} van ${ck.plaats} (${p(ck.pctDuurzaam)})</b></div>
-        </div>
-        <div>${nodigPm != null ? `
-          <div class="pot"><span>Voor je doel (${f1(nodigPm)} plaatsingen/mnd) nodig:</span><b>&nbsp;</b></div>
-          <div class="pot"><span>→ offers per maand</span><b>${f1(nodigPm * (ck.offerPerPlaatsing || 0))}</b></div>
-          <div class="pot"><span>→ voorstellen per maand</span><b style="color:var(--accent)">${f1(nodigPm * (ck.voorPerPlaatsing || 0))}</b></div>`
-          : '<div class="pot"><span>Vul je jaardoel in (🎯 boven) en dit rekent om naar benodigde offers en voorstellen per maand.</span></div>'}
-        </div>
-      </div>
-      <p class="muted mt">Gebaseerd op je afgeronde trajecten van het bord (${ck.voorstellen} kandidaten). Offer-stadium = ooit In de wacht/Offer/Contract ondertekenen bereikt. De keten wordt vanzelf scherper naarmate het bord langer fase-historie vastlegt.</p>
-      </div>`;
-    })()}
+    <div class="panel mb" id="ketPanel"><h2>🔗 Conversie-keten <span class="muted">— van voorstel tot blijvende plaatsing</span> ${uitlegChip('keten')}</h2>
+      <div id="ketDyn">${ketenHtml()}</div></div>
 
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>
 
@@ -590,6 +605,7 @@ function renderCashflow(root) {
   };
   $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Jaardoel opgeslagen ✓'); rerender(); };
   wireUitkeer();
+  wireKeten();
   $('#sc_load').onchange = e => cfLoadScenario(e.target.value);
   $('#sc_save').onclick = openSaveScenario;
   $('#sc_star').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een opgeslagen scenario', true); cfSetDefaultScenario(n); };

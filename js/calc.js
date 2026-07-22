@@ -447,8 +447,10 @@ function breakEven() {
 
 // ── conversie-keten: voorstel → offer → plaatsing → blijver ─────
 // Gebaseerd op afgeronde trajecten (bord): hoeveel heb je er van elk nodig?
-function conversieKeten() {
-  const resolved = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') && isResolvedCand(c));
+function conversieKeten(filter = {}) {
+  let resolved = D.candidates.filter(c => !isFlexType(c.type) && !(c.vervangt || '') && isResolvedCand(c));
+  if (filter.klant) resolved = resolved.filter(c => c.klant === filter.klant);
+  if (filter.rec) resolved = resolved.filter(c => (c.rec || '').trim() === filter.rec);
   const idxO = FUNNEL.indexOf('In de wacht');           // offer-stadium = In de wacht/Offer/ondertekenen of verder
   const voorstellen = resolved.length;                  // in procedure genomen (voorgesteld)
   const offers = resolved.filter(c => furthestIdx(c) >= idxO || c.afval_type === 'offer_afgewezen' || reachedPlacement(c)).length;
