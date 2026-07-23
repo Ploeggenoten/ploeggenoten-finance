@@ -193,8 +193,13 @@ function openPlacementDetail(pid) {
     const acts = [];
     if (i.status === 'te_factureren') acts.push(`<button class="btn small" data-iact="fact" data-iid="${i.id}">Gefactureerd ✓</button>`);
     if (i.status === 'gefactureerd') acts.push(`<button class="btn small" data-iact="paid" data-iid="${i.id}">Betaald ✓</button>`);
-    if (i.status !== 'vervallen') acts.push(`<button class="btn small ghost" data-iact="edit" data-iid="${i.id}">✎</button>`);
-    if (i.status !== 'betaald') acts.push(`<button class="btn small ghost" data-iact="verval" data-iid="${i.id}" title="Vervallen">✕</button>`);
+    if (i.status === 'vervallen') {
+      acts.push(`<button class="btn small" data-iact="herstel" data-iid="${i.id}" title="Terugzetten naar te factureren">↺ herstel</button>`);
+      acts.push(`<button class="btn small ghost" data-iact="del" data-iid="${i.id}" title="Termijn verwijderen">🗑</button>`);
+    } else {
+      acts.push(`<button class="btn small ghost" data-iact="edit" data-iid="${i.id}">✎</button>`);
+      if (i.status !== 'betaald') acts.push(`<button class="btn small ghost" data-iact="verval" data-iid="${i.id}" title="Vervallen">✕</button>`);
+    }
     return `<tr class="${i.status === 'vervallen' ? 'dim' : ''}"><td>${i.termijn_nr}</td>
       <td>${fmtD(i.geplande_datum)}</td><td class="num">${eur2(i.bedrag_excl)}</td><td class="num">${eur2(i.bedrag_excl * btw)}</td>
       <td>${stTag}</td><td>${fmtD(i.factuurdatum)}</td><td>${fmtD(i.betaaldatum)}</td>
@@ -254,6 +259,16 @@ function openPlacementDetail(pid) {
     if (b.dataset.iact === 'paid') { await markeerInstallment(inst, 'betaald'); closeModal(); openPlacementDetail(pid); }
     if (b.dataset.iact === 'verval') {
       await dbWrite('fin_installments', t => t.update({ status: 'vervallen' }).eq('id', inst.id));
+      await reload('fin_installments', 'installments', 'geplande_datum');
+      closeModal(); openPlacementDetail(pid); rerender();
+    }
+    if (b.dataset.iact === 'herstel') {
+      await dbWrite('fin_installments', t => t.update({ status: 'te_factureren' }).eq('id', inst.id));
+      await reload('fin_installments', 'installments', 'geplande_datum');
+      closeModal(); openPlacementDetail(pid); rerender();
+    }
+    if (b.dataset.iact === 'del') {
+      await dbWrite('fin_installments', t => t.delete().eq('id', inst.id));
       await reload('fin_installments', 'installments', 'geplande_datum');
       closeModal(); openPlacementDetail(pid); rerender();
     }
