@@ -24,9 +24,16 @@ function renderInstellingen(root) {
   const lening = D.loans[0];
 
   const klanten = [...new Set([...D.placements.map(p => p.klant), ...D.clients.map(c => c.naam)])].sort();
+  const afspraakTxt = r => {
+    const n = Number(r.aantal_termijnen) || 0;
+    if (!n) return '<span class="muted">volgt historie</span>';
+    const verdeling = n === 2 ? '50/50' : n === 1 ? '100% ineens' : `${n}× gelijk`;
+    return `<b>${verdeling}</b>${n > 1 ? ` · ${r.maanden_tussen || 1} mnd ertussen` : ''}`;
+  };
   const tariefRows = D.tarieven.map(r => `<tr>
     <td>${esc(r.klant)}</td><td>${esc(r.functie || 'alle functies')}</td>
-    <td class="num"><b>${Math.round(r.tarief_pct * 100)}%</b></td><td class="muted">${esc(r.note || '')}</td>
+    <td class="num"><b>${Math.round(r.tarief_pct * 100)}%</b></td>
+    <td>${afspraakTxt(r)}</td><td class="muted">${esc(r.note || '')}</td>
     <td class="right"><button class="btn small ghost" data-tedit="${r.id}">✎</button>
     <button class="btn small ghost" data-tdel="${r.id}">✕</button></td></tr>`).join('');
 
@@ -35,10 +42,10 @@ function renderInstellingen(root) {
     <div class="panel mt mb"><div class="spread mb"><h2>💼 W&S-tarieven per klant</h2>
       <button class="btn primary small" id="tNieuw">+ Tarief</button></div>
       <div class="table-wrap"><table>
-      <tr><th>Klant</th><th>Functie</th><th class="num">Tarief</th><th>Notitie</th><th></th></tr>
-      ${tariefRows || '<tr><td colspan="5" class="empty">Nog geen tarieven — voeg per klant je afgesproken W&S-percentage toe. De fee wordt dan automatisch: maandloon × (1+toeslag) × 12,96 × tarief.</td></tr>'}
+      <tr><th>Klant</th><th>Functie</th><th class="num">Tarief</th><th>Facturatie-afspraak</th><th>Notitie</th><th></th></tr>
+      ${tariefRows || '<tr><td colspan="6" class="empty">Nog geen tarieven — voeg per klant je afgesproken W&S-percentage toe. De fee wordt dan automatisch: totaal jaarsalaris (incl. toeslagen van het bord) × tarief.</td></tr>'}
       </table></div>
-      <p class="muted mt">Een rij zónder functie geldt als standaard voor die klant; een rij mét functie gaat vóór (bijv. "Kok" bij Starcuisine een ander percentage). Maandloon en ploegentoeslag vult je AM in op het pijplijnbord.</p></div>
+      <p class="muted mt">Een rij zónder functie geldt als standaard voor die klant; een rij mét functie gaat vóór. De <b>facturatie-afspraak</b> (bijv. 50/50 met 3 maanden ertussen) bepaalt het automatische termijnenschema bij een nieuwe plaatsing; leeg = het patroon van eerdere plaatsingen bij die klant. Salaris-componenten (ploegen-, vakantie-, eindejaars- en overige toeslagen) vult je AM in op het pijplijnbord.</p></div>
     <div class="panel mb"><div class="spread mb"><h2>👷 Flex-afspraken per klant</h2>
       <button class="btn primary small" id="faNieuw">+ Flex-afspraak</button></div>
       <div class="table-wrap"><table>
@@ -151,14 +158,24 @@ function renderInstellingen(root) {
           <datalist id="tKlantList">${klantLijst.map(k => `<option value="${esc(k)}">`).join('')}</datalist></div>
         <div><label>Functie (leeg = alle)</label><input id="t_functie" value="${esc(r?.functie || '')}" placeholder="bijv. Kok"></div>
         <div><label>Tarief % van jaarloon</label><input id="t_pct" type="number" step="0.5" min="1" max="50" value="${r ? Math.round(r.tarief_pct * 1000) / 10 : ''}" placeholder="bijv. 20"></div>
+        <div><label>Termijnen (leeg = volg historie)</label><select id="t_n">
+          <option value="" ${!r?.aantal_termijnen ? 'selected' : ''}>— volg historie —</option>
+          <option value="1" ${r?.aantal_termijnen === 1 ? 'selected' : ''}>1 · alles ineens</option>
+          <option value="2" ${r?.aantal_termijnen === 2 ? 'selected' : ''}>2 · 50/50</option>
+          <option value="3" ${r?.aantal_termijnen === 3 ? 'selected' : ''}>3 · in drieën</option>
+          <option value="4" ${r?.aantal_termijnen === 4 ? 'selected' : ''}>4 · in vieren</option></select></div>
+        <div><label>Maanden tussen termijnen</label><input id="t_tussen" type="number" min="1" max="12" step="1" value="${r?.maanden_tussen || ''}" placeholder="bijv. 3"></div>
         <div class="span3"><label>Notitie (bijv. verwijzing overeenkomst)</label><input id="t_note" value="${esc(r?.note || '')}"></div>
       </div>
+      <p class="muted">Voorbeeld 50/50-regeling: termijnen = 2, maanden ertussen = 3 → 50% bij start facturatie, 50% drie maanden later. Stopt de kandidaat vóór die tweede termijn, dan laat de app die automatisch vervallen.</p>
       <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
       <button class="btn primary" id="t_save">Opslaan</button></div>`, { narrow: true });
     $('#t_save').onclick = async () => {
       const row = {
         klant: $('#t_klant').value.trim(), functie: $('#t_functie').value.trim() || null,
         tarief_pct: Number($('#t_pct').value) / 100, note: $('#t_note').value.trim() || null,
+        aantal_termijnen: $('#t_n').value ? Number($('#t_n').value) : null,
+        maanden_tussen: $('#t_tussen').value ? Number($('#t_tussen').value) : null,
       };
       if (!row.klant || !row.tarief_pct) return toast('Klant en tarief zijn verplicht', true);
       await dbWrite('fin_tarieven', t => r ? t.update(row).eq('id', r.id) : t.insert(row));

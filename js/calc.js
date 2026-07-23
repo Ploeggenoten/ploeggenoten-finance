@@ -63,7 +63,9 @@ function inboxCandidates() {
     !isFlexType(c.type) &&                        // flex loopt via Pronkert, niet via W&S-facturatie
     !(c.vervangt || '') &&                        // garantievervangers zijn geen nieuwe fee
     !linked.has(c.id) && !dismissed.has(c.id) &&
-    !byName.has((c.naam || '').trim().toLowerCase()));
+    // naam-vangnet tegen dubbels — behalve bij een herstart (♻): dat is bewust een nieuw traject
+    // van dezelfde persoon (bijv. gestopt bij klant A, heraangeboden bij klant B) = nieuwe fee
+    (c.herstart_van ? true : !byName.has((c.naam || '').trim().toLowerCase())));
 }
 
 // gestopt op het bord, maar nog niet in finance verwerkt
@@ -232,20 +234,39 @@ function tariefVoor(bordKlant, functie) {
   return { pct: Number(rij.tarief_pct), rij };
 }
 
-// fee-berekening: maandloon × (1+toeslag) × jaarfactor (12,96) × klanttarief
+// totaal jaarsalaris uit de bord-componenten. VT default 8% (zat voorheen impliciet in jaarfactor 12,96
+// = 12 × 1,08 — dus zonder ingevulde componenten is de uitkomst identiek aan de oude berekening).
+// VT rekent over loon incl. ploegentoeslag; eindejaarsuitkering en overig over het kale jaarloon.
+function jaarSalaris(c, loon) {
+  const ploeg = Number(c.toeslag_pct || 0);
+  const vt = (c.vt_pct == null || c.vt_pct === '') ? 8 : Number(c.vt_pct);
+  const eju = Number(c.eju_pct || 0), overig = Number(c.overig_pct || 0);
+  const jr = loon * 12;
+  return jr * (1 + ploeg / 100) * (1 + vt / 100) + jr * eju / 100 + jr * overig / 100;
+}
+function salarisUitleg(c, loon) {
+  const d = [`€${loon} ×12`];
+  if (Number(c.toeslag_pct)) d.push(`+${c.toeslag_pct}% ploeg`);
+  d.push(`+${(c.vt_pct == null || c.vt_pct === '') ? 8 : c.vt_pct}% VT`);
+  if (Number(c.eju_pct)) d.push(`+${c.eju_pct}% EJU`);
+  if (Number(c.overig_pct)) d.push(`+${c.overig_pct}% overig`);
+  return d.join(' ');
+}
+
+// fee-berekening: totaal jaarsalaris (alle componenten van het bord) × klanttarief
 function feeBerekening(c) {
-  const jf = Number(S('jaarfactor', 12.96));
   const tarief = tariefVoor(c.klant, c.functie);
   const loonNote = (c.note || '').match(/\b([2-6]\d{3})\b/);
   const loon = Number(c.maandloon) || (loonNote ? Number(loonNote[1]) : null);
-  const toeslag = Number(c.toeslag_pct || 0) / 100;
   if (loon && tarief) {
-    const fee = Math.round(loon * (1 + toeslag) * jf * tarief.pct);
-    return { fee, zeker: true, uitleg: `€${loon}${toeslag ? ` × ${(1 + toeslag).toFixed(2).replace('.', ',')} (toeslag)` : ''} × ${String(jf).replace('.', ',')} × ${Math.round(tarief.pct * 100)}% (${tarief.rij.klant}${tarief.rij.functie ? ' · ' + tarief.rij.functie : ''}) = €${fee}` };
+    const js = jaarSalaris(c, loon);
+    const fee = Math.round(js * tarief.pct);
+    return { fee, zeker: true, uitleg: `${salarisUitleg(c, loon)} = jaarsalaris €${Math.round(js)} × ${Math.round(tarief.pct * 100)}% (${tarief.rij.klant}${tarief.rij.functie ? ' · ' + tarief.rij.functie : ''}) = €${fee}` };
   }
   if (loon) {
-    const fee = Math.round(loon * (1 + toeslag) * 12 * Number(S('fee_pct', 0.22)));
-    return { fee, zeker: false, uitleg: `Geen tarief bekend voor ${c.klant} — geschat: €${loon} × 12 × ${Math.round(Number(S('fee_pct', 0.22)) * 100)}%. Vul het tarief in bij Instellingen!` };
+    const js = jaarSalaris(c, loon);
+    const fee = Math.round(js * Number(S('fee_pct', 0.22)));
+    return { fee, zeker: false, uitleg: `Geen tarief bekend voor ${c.klant} — geschat: jaarsalaris €${Math.round(js)} × ${Math.round(Number(S('fee_pct', 0.22)) * 100)}%. Vul het tarief in bij Instellingen!` };
   }
   const kd = klantDefaults(c.klant);
   const fee = Math.round(kd.gemFee || kpis().gemFee || 8500);
@@ -264,18 +285,23 @@ async function autoCreatePlacements() {
     const kd = klantDefaults(c.klant);
     const fb = feeBerekening(c);
     const start = c.start || c.geplaatst_op || todayISO();
+    // klant-afspraak (Instellingen → tarieven) gaat vóór het historische patroon:
+    // bv. 50/50-regeling = 2 termijnen met 3 maanden ertussen
+    const tr = tariefVoor(c.klant, c.functie);
+    const n = (tr && tr.rij && Number(tr.rij.aantal_termijnen)) || kd.n;
+    const tussen = (tr && tr.rij && Number(tr.rij.maanden_tussen)) || kd.tussen;
     const row = {
       id: volgendPlaatsingId(), klant: kd.sheetKlant, kandidaat: c.naam, functie: c.functie || '',
       fee_excl: fb.fee, contract_datum: c.geplaatst_op || todayISO(), eerste_factuurdatum: start,
-      aantal_termijnen: kd.n, maanden_tussen: kd.tussen, betaaltermijn_dgn: kd.betaal,
+      aantal_termijnen: n, maanden_tussen: tussen, betaaltermijn_dgn: kd.betaal,
       garantie_mnd: Number(c.garantie_mnd || 0), pipeline_candidate_id: c.id,
       bron: 'pipeline', concept: true,
-      note: fb.uitleg,
+      note: fb.uitleg + (c.herstart_van ? ' · ♻ herstart (eerder traject apart geregistreerd)' : ''),
     };
     const fee = fb.fee;
     try {
       await dbWrite('fin_placements', t => t.insert(row));
-      const schema = genSchema(kd.n > 1 ? 'nx' : '1x', fee, start, { n: kd.n, tussen: kd.tussen });
+      const schema = genSchema(n > 1 ? 'nx' : '1x', fee, start, { n, tussen });
       for (const r of schema)
         await dbWrite('fin_installments', t => t.insert({
           placement_id: row.id, termijn_nr: r.nr, bedrag_excl: r.bedrag, geplande_datum: r.datum, status: 'te_factureren',
