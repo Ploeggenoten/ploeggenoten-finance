@@ -86,7 +86,7 @@ function acties() {
   for (const p of D.placements) {
     if (p.concept) {
       // eerst fee bevestigen; factureer-acties wachten tot dan
-      list.push({ soort: 'concept', urg: 2, p, txt: `Nieuwe plaatsing ${p.id} automatisch aangemaakt — fee geschat op ${eur(p.fee_excl)}, bevestig of pas aan` });
+      list.push({ soort: 'concept', urg: 2, p, txt: `Nieuwe plaatsing ${p.id} vanaf het bord — fee geschat op ${eur(p.fee_excl)}. Bevestig de fee én kies het factuurschema (bv. 50% bij tekenen / 50% na X mnd)` });
       continue;
     }
     const st = placementStats(p);

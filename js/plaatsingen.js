@@ -63,6 +63,21 @@ function genSchema(preset, fee, startISO, opts = {}) {
   return rows;
 }
 
+// termijnenschema opnieuw zetten (alleen als er nog niets gefactureerd is)
+async function regenTermijnen(p, preset, opts) {
+  const ins = instOf(p.id);
+  if (ins.some(i => i.status === 'gefactureerd' || i.status === 'betaald'))
+    return toast('Er is al gefactureerd op deze plaatsing — pas losse termijnen aan met ✎', true);
+  await dbWrite('fin_installments', t => t.delete().eq('placement_id', p.id));
+  const start = p.eerste_factuurdatum || p.contract_datum || todayISO();
+  const schema = genSchema(preset, Number(p.fee_excl), start, opts);
+  for (const r of schema)
+    await dbWrite('fin_installments', t => t.insert({ placement_id: p.id, termijn_nr: r.nr, bedrag_excl: r.bedrag, geplande_datum: r.datum, status: 'te_factureren' }));
+  await dbWrite('fin_placements', t => t.update({ aantal_termijnen: schema.length, maanden_tussen: opts.tussen || opts.naMnd || 1 }).eq('id', p.id));
+  await Promise.all([reload('fin_installments', 'installments', 'geplande_datum'), reload('fin_placements', 'placements', 'id')]);
+  return true;
+}
+
 // ── wizard: nieuwe plaatsing (evt. vanuit pijplijn-kandidaat) ──
 function openPlacementWizard({ candidate = null, edit = null } = {}) {
   const p = edit || {};
@@ -203,6 +218,21 @@ function openPlacementDetail(pid) {
       <div class="kpi ${st.open ? 'warn' : ''}"><div class="lbl">Openstaand</div><div class="val">${eur(st.open)}</div></div>
       <div class="kpi"><div class="lbl">Nog te factureren</div><div class="val">${eur(st.nog)}</div></div>
     </div>
+    ${p.concept ? `
+    <div class="panel mb" style="border-left:4px solid var(--amber);padding:14px 16px">
+      <b>🧾 Hoe factureer je deze plaatsing?</b> <span class="muted">— afspraak met ${esc(p.klant)}</span>
+      <div class="row mt" style="gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="d_preset">
+          <option value="1x">100% ineens</option>
+          <option value="5050">50% bij tekenen · 50% na X mnd</option>
+          <option value="nx">In N termijnen, elke X mnd</option>
+        </select>
+        <span id="d_50opts">2e helft na <input id="d_naMnd" type="number" min="1" max="12" value="3" style="width:56px"> mnd</span>
+        <span id="d_nxopts" style="display:none"><input id="d_n" type="number" min="2" value="3" style="width:52px"> × om de <input id="d_tussen" type="number" min="1" value="1" style="width:52px"> mnd</span>
+        <button class="btn small primary" id="d_split">Termijnen zetten</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Splitst de fee (${eur2(p.fee_excl)} excl.) over de termijnen hieronder. Stopt de kandidaat vóór een termijn, dan vervalt die automatisch — je factureert alleen wat je verdiend hebt.</p>
+    </div>` : ''}
     <div class="table-wrap"><table>
       <tr><th>#</th><th>Gepland</th><th class="num">Excl. btw</th><th class="num">Incl. btw</th><th>Status</th><th>Factuurdatum</th><th>Betaald op</th><th></th></tr>
       ${rows}</table></div>
@@ -229,6 +259,27 @@ function openPlacementDetail(pid) {
     }
     if (b.dataset.iact === 'edit') openInstallmentEdit(inst, pid);
   });
+  if (p.concept) {
+    const psSel = $('#d_preset');
+    // voorselectie op basis van hoe het concept nu binnenkwam (klant-afspraak)
+    const nInst = st.ins.length;
+    psSel.value = nInst === 2 ? '5050' : nInst > 2 ? 'nx' : '1x';
+    if (nInst > 2) $('#d_n').value = nInst;
+    const syncOpts = () => {
+      $('#d_50opts').style.display = psSel.value === '5050' ? '' : 'none';
+      $('#d_nxopts').style.display = psSel.value === 'nx' ? '' : 'none';
+    };
+    syncOpts();
+    psSel.onchange = syncOpts;
+    $('#d_split').onclick = async () => {
+      const preset = psSel.value;
+      const opts = preset === '5050' ? { naMnd: Number($('#d_naMnd').value) || 3 }
+        : preset === 'nx' ? { n: Math.max(2, Number($('#d_n').value) || 2), tussen: Number($('#d_tussen').value) || 1 }
+        : {};
+      const ok = await regenTermijnen(p, preset, opts);
+      if (ok) { closeModal(); openPlacementDetail(pid); toast('Factuurschema bijgewerkt'); }
+    };
+  }
   $('#d_bevestig') && ($('#d_bevestig').onclick = async () => {
     await dbWrite('fin_placements', t => t.update({ concept: false, updated_at: new Date().toISOString() }).eq('id', p.id));
     await reload('fin_placements', 'placements', 'id');
