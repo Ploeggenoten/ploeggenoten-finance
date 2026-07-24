@@ -310,10 +310,26 @@ function openPlacementDetail(pid) {
     closeModal(); toast('Vervanging geregistreerd ✓'); rerender();
   });
   $('#d_addTermijn').onclick = async () => {
-    const nr = Math.max(0, ...st.ins.map(i => i.termijn_nr)) + 1;
-    await dbWrite('fin_installments', t => t.insert({ placement_id: pid, termijn_nr: nr, bedrag_excl: 0, geplande_datum: todayISO(), status: 'te_factureren' }));
+    // lege placeholder-termijnen (0 euro, nog te factureren) opruimen — die zijn per ongeluk toegevoegd
+    const leeg = st.ins.filter(i => i.status === 'te_factureren' && Number(i.bedrag_excl || 0) === 0);
+    for (const i of leeg) await dbWrite('fin_installments', t => t.delete().eq('id', i.id));
+    // al gefactureerde/betaalde termijnen blijven vast; de rest van de fee verdelen we opnieuw
+    const teF = st.ins.filter(i => i.status === 'te_factureren' && Number(i.bedrag_excl || 0) > 0);
+    const vast = st.ins.filter(i => i.status === 'gefactureerd' || i.status === 'betaald')
+      .reduce((s, i) => s + Number(i.bedrag_excl || 0), 0);
+    const teVerdelen = Math.max(0, Number(p.fee_excl || 0) - vast);
+    const n = teF.length + 1;                                   // bestaande gevulde termijnen + de nieuwe
+    const deel = Math.floor((teVerdelen / n) * 100) / 100;
+    const nr = Math.max(0, ...st.ins.map(i => i.termijn_nr)) + 1 - leeg.length;
+    const laatste = [...teF].filter(i => i.geplande_datum).sort((a, b) => a.geplande_datum.localeCompare(b.geplande_datum)).pop();
+    const nieuweDatum = laatste ? addMonths(laatste.geplande_datum, 1) : todayISO();
+    let uitgedeeld = 0;
+    for (const i of teF) { await dbWrite('fin_installments', t => t.update({ bedrag_excl: deel }).eq('id', i.id)); uitgedeeld += deel; }
+    const rest = Math.round((teVerdelen - uitgedeeld) * 100) / 100;   // nieuwe termijn krijgt de rest (incl. afrondingscent)
+    await dbWrite('fin_installments', t => t.insert({ placement_id: pid, termijn_nr: nr, bedrag_excl: rest, geplande_datum: nieuweDatum, status: 'te_factureren' }));
     await reload('fin_installments', 'installments', 'geplande_datum');
     closeModal(); openPlacementDetail(pid);
+    toast(`Fee gesplitst over ${n} termijn(en) — pas de datum van de nieuwe termijn aan (bv. de eerste werkdag) via ✎`);
   };
   $('#d_del').onclick = async () => {
     if (!confirm(`Plaatsing ${p.id} (${p.kandidaat}) én alle termijnen verwijderen?`)) return;
