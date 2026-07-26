@@ -69,9 +69,18 @@ function renderVandaag(root) {
     : `<div class="pot"><span>🟢 Geen urgente signalen. Laagste saldopunt komende 12 mnd: <b>${eur(proj.laagste.saldo)}</b> (${esc(proj.laagste.label)}).</span></div>`)
     + `<div class="mt right"><button class="btn small" id="naarAdvies">Alle adviezen →</button></div>`;
 
+  const brief = cfoBriefing();
+  const briefIco = { ok: '🟢', warn: '🟠', kans: '🟡' };
+  const briefHtml = `
+    <div class="panel mb" style="border-left:4px solid var(--accent);background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
+      <h2 style="margin:0 0 8px">🧭 Je CFO deze week <span class="muted" style="font-weight:400">— ${fmtD(todayISO())}</span></h2>
+      ${brief.map(z => `<div style="display:flex;gap:8px;align-items:flex-start;margin:5px 0"><span>${briefIco[z.k] || '•'}</span><span>${z.t}</span></div>`).join('')}
+    </div>`;
+
   root.innerHTML = `
     <h1>Vandaag · ${fmtD(todayISO())}</h1>
     <div class="muted mb">${lijst.length} actie${lijst.length === 1 ? '' : 's'} open</div>
+    ${briefHtml}
     ${kpiHtml}
     <div class="grid cols-2 mt">
       <div class="panel"><h2>📌 Acties ${uitlegChip('v_acties')}</h2>${actieHtml}</div>

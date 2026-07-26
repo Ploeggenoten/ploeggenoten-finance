@@ -112,6 +112,14 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> per klant het afgesproken W&S-tarief naast je gewogen gemiddelde, en hoeveel "rek" er op jaarbasis zit als een klant naar dat gemiddelde zou gaan.</p>
     <p><b>Hoe berekend:</b> netto omzet per klant dit jaar (na vervallen termijnen), geëxtrapoleerd naar 12 maanden; rek = die jaaromzet × het tariefverschil. Gemiddelde is gewogen naar omzet.</p>
     <p><b>Hoe sturen:</b> dit is onderhandelmunitie: bij contractverlenging of een nieuwe aanvraag weet je precies welke klant onder je norm zit en wat één procentpunt waard is. "Geen tarief ✎" = vastleggen bij Instellingen.</p>` },
+  invest: { t: '🧮 Investeringsbeslisser', h: `
+    <p><b>Wat je ziet:</b> tik een investering in (recruiter, marketing, auto, aankoop of vrij) en de app zegt of je 'm je nu kunt veroorloven — met de impact op je buffer, break-even, krapste saldo en terugverdientijd.</p>
+    <p><b>Hoe berekend:</b> een eenmalige uitgave drukt je hele saldopad omlaag; een maandlast verhoogt je vaste lasten (en dus je break-even). "Verantwoord" = op je krapste punt de komende 12 maanden blijf je boven je gewenste buffer (Uitkeer-planner). Terugverdientijd = eenmalig ÷ (extra omzet − maandlast).</p>
+    <p><b>Hoe sturen:</b> dit beantwoordt "wanneer kan ik investeren": groen = nu, oranje = over X maanden haalbaar. Pas de verwachte extra omzet aan naar jouw inschatting — dat bepaalt de terugverdientijd.</p>` },
+  week13: { t: '📅 13-weken cashflow', h: `
+    <p><b>Wat je ziet:</b> je verwachte banksaldo week voor week, 13 weken vooruit, met het krapste moment eruit gelicht.</p>
+    <p><b>Hoe berekend:</b> ontvangsten = je factuurschema op de verwachte betaaldatum (factuurdatum + betaaltermijn) + flex-weekmarge. Uitgaven = vaste lasten (per week uitgesmeerd) + btw-afdrachten en aflossingen op hun echte datum. Nieuwe, nog niet-gefactureerde omzet zit er bewust NIET in — dit is je zekere kaspositie.</p>
+    <p><b>Hoe sturen:</b> zo zie je vooraf of de btw-afdracht, salarissen en een trage betaler samenvallen. Plan grote uitgaven in de weken met ruimte, niet rond het dieptepunt.</p>` },
   a_belasting: { t: '🧾 Belasting & DGA', h: `
     <p><b>Wat je ziet:</b> je twee belastingsoorten strikt uit elkaar (btw = doorgeefgeld, Vpb = winstbelasting), je Vpb-reservering, een gebruikelijkloon-check en de winst-vs-uitkeren-afweging.</p>
     <p><b>Hoe berekend:</b> btw = 21% over gefactureerde omzet − voorbelasting (per kwartaal). Vpb = 19% over je jaarwinst (omzet − kosten), bepaald op 31 december — dus over het héle jaar. DGA-loon reken je zelf in (bruto/maand + startmaand); de norm is het gebruikelijk loon 2026 van €58.000.</p>
@@ -475,6 +483,76 @@ function wireKeten() {
   wrap.querySelectorAll('.ketstap').forEach(b => b.onclick = () => { _ketStap = _ketStap === b.dataset.stap ? '' : b.dataset.stap; her(); });
 }
 
+// ── Investeringsbeslisser ──────────────────────────────────────
+let _invest = null;
+function investPreset(key) {
+  const gemFee = Math.round(kpis().gemFee || 8500);
+  const p = {
+    recruiter: { key, eenmalig: 0, maandlast: 4300, extraOmzetPm: gemFee * 2 },
+    marketing: { key, eenmalig: 0, maandlast: 3000, extraOmzetPm: gemFee },
+    auto: { key, eenmalig: 0, maandlast: 800, extraOmzetPm: 0 },
+    aankoop: { key, eenmalig: 10000, maandlast: 0, extraOmzetPm: 0 },
+    vrij: { key, eenmalig: 0, maandlast: 0, extraOmzetPm: 0 },
+  }[key];
+  return p || { key: 'vrij', eenmalig: 0, maandlast: 0, extraOmzetPm: 0 };
+}
+function investHtml() {
+  if (!_invest) _invest = investPreset('recruiter');
+  const iv = _invest, chk = investeringsCheck(iv), r = chk.r;
+  const presets = [['recruiter', '👤 Recruiter'], ['marketing', '📣 Marketing'], ['auto', '🚗 Auto'], ['aankoop', '🛒 Aankoop'], ['vrij', '✏️ Vrij']];
+  const oordeel = chk.haalbaarNu
+    ? `<span class="tag green" style="font-size:13px">✅ Verantwoord — je blijft boven je buffer</span>`
+    : chk.maandenTot != null
+      ? `<span class="tag amber" style="font-size:13px">⏳ Nog even wachten — haalbaar over ~${chk.maandenTot} maand${chk.maandenTot === 1 ? '' : 'en'}</span>`
+      : `<span class="tag red" style="font-size:13px">⛔ Niet met je huidige cashflow</span>`;
+  const advies = chk.haalbaarNu
+    ? `Je hebt ~<b>${eur(r.ruimteNu)}</b> vrij bovenop je buffer (${eur(r.euroBuffer)}). Deze keuze laat je krapste punt komende 12 mnd op <b>${eur(chk.laagsteNa)}</b> — nog steeds veilig.${chk.payback != null ? ` Terugverdiend in ~<b>${chk.payback.toFixed(1)} maanden</b>.` : ''}`
+    : `Deze uitgave duwt je krapste punt naar <b>${eur(chk.laagsteNa)}</b>, onder je gewenste buffer van ${eur(r.euroBuffer)} (tekort ${eur(chk.tekort)}).${chk.maandenTot != null ? ` Op je huidige vrije kasstroom (~${eur(r.netto6)}/mnd) kan het over ~<b>${chk.maandenTot} maanden</b> wél.` : ' Zet eerst je omzet/incasso op orde.'}`;
+  const laatste = chk.eenmalig > 0
+    ? `<div class="pot"><span>Terugverdientijd</span><b>${chk.payback != null ? chk.payback.toFixed(1) + ' mnd' : '—'}</b></div>`
+    : `<div class="pot"><span>Netto bijdrage/mnd</span><b style="color:${chk.nettoPerMnd >= 0 ? 'var(--green)' : 'var(--red)'}">${chk.nettoPerMnd >= 0 ? '+' : ''}${eur(chk.nettoPerMnd)}</b></div>`;
+  return `
+    <div class="row mb" style="gap:6px;flex-wrap:wrap">${presets.map(([k, l]) => `<button class="btn small ${iv.key === k ? 'primary' : ''}" data-ivp="${k}">${l}</button>`).join('')}</div>
+    <div class="grid cols-3 mb" style="gap:10px">
+      <label class="muted" style="font-size:12px;display:block">Eenmalig €<br><input id="iv_een" type="number" min="0" step="500" value="${iv.eenmalig}" style="width:100%"></label>
+      <label class="muted" style="font-size:12px;display:block">Maandlast €<br><input id="iv_mnd" type="number" min="0" step="100" value="${iv.maandlast}" style="width:100%"></label>
+      <label class="muted" style="font-size:12px;display:block">Verwachte extra omzet/mnd €<br><input id="iv_omz" type="number" min="0" step="500" value="${iv.extraOmzetPm}" style="width:100%"></label>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px">
+      <div style="margin-bottom:8px">${oordeel}</div>
+      <div class="grid cols-2" style="gap:2px 18px">
+        <div class="pot"><span>Buffer (mnd vaste lasten)</span><b>${chk.bufferVoorMnd.toFixed(1)} → ${chk.bufferNaMnd.toFixed(1)}</b></div>
+        <div class="pot"><span>Break-even</span><b>${chk.breakEvenVoor ? chk.breakEvenVoor.toFixed(1) : '—'} → ${chk.breakEvenNa ? chk.breakEvenNa.toFixed(1) : '—'} pl/mnd</b></div>
+        <div class="pot"><span>Krapste saldo (12 mnd)</span><b>${eur(chk.laagsteVoor)} → ${eur(chk.laagsteNa)}</b></div>
+        ${laatste}
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px">👉 ${advies}</p>`;
+}
+function wireInvest() {
+  const wrap = $('#investDyn'); if (!wrap) return;
+  const her = () => { wrap.innerHTML = investHtml(); wireInvest(); };
+  wrap.querySelectorAll('[data-ivp]').forEach(b => b.onclick = () => { _invest = investPreset(b.dataset.ivp); her(); });
+  const bind = (id, veld) => { const el = wrap.querySelector(id); if (el) el.oninput = e => { _invest[veld] = Math.max(0, Number(e.target.value) || 0); _invest.key = 'vrij'; wrap.querySelectorAll('[data-ivp]').forEach(b => b.classList.toggle('primary', b.dataset.ivp === 'vrij')); const chk = investHtml(); /* herbereken alleen output */ wrap.innerHTML = chk; wireInvest(); }; };
+  bind('#iv_een', 'eenmalig'); bind('#iv_mnd', 'maandlast'); bind('#iv_omz', 'extraOmzetPm');
+}
+
+// ── 13-weken cashflow ──────────────────────────────────────────
+function weekCashHtml() {
+  const wp = weekProjectie(13), min = wp.laagste;
+  const negatief = wp.weeks.some(w => w.saldo < 0);
+  return `
+    <div class="muted mb" style="font-size:12px">Week-voor-week je verwachte banksaldo (facturen op betaaldatum, flex, vaste lasten, btw-afdrachten, aflossingen). Krapste moment: <b>week van ${fmtD(min.start)}</b> → <b style="color:${min.saldo < 0 ? 'var(--red)' : 'var(--accent)'}">${eur(min.saldo)}</b>${negatief ? ' <span class="tag red">saldo wordt negatief!</span>' : ''}.</div>
+    <div class="table-wrap"><table>
+      <tr><th>Week vanaf</th><th class="num">In</th><th class="num">Uit</th><th class="num">Netto</th><th class="num">Saldo eind</th></tr>
+      ${wp.weeks.map(w => `<tr ${w === min ? 'style="background:rgba(200,241,53,.08)"' : ''}><td>${fmtD(w.start)}${w === min ? ' <span class="tag amber">laagst</span>' : ''}</td>
+        <td class="num">${w.in ? eur(w.in) : '—'}</td><td class="num">${w.uit ? eur(w.uit) : '—'}</td>
+        <td class="num" style="color:${w.netto < 0 ? 'var(--red)' : 'var(--green)'}">${w.netto >= 0 ? '+' : ''}${eur(w.netto)}</td>
+        <td class="num"><b style="color:${w.saldo < 0 ? 'var(--red)' : 'var(--txt)'}">${eur(w.saldo)}</b></td></tr>`).join('')}
+    </table></div>
+    <p class="muted mt" style="font-size:11px">Vaste lasten zijn per week uitgesmeerd; btw-afdrachten en aflossingen staan op hun echte datum (daar zie je de dips). Nieuwe, nog niet-gefactureerde W&S-omzet zit hier <b>niet</b> in — dit is je zekere kaspositie.</p>`;
+}
+
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
@@ -543,6 +621,13 @@ function renderCashflow(root) {
       <span class="row" style="gap:8px;align-items:center"><label style="margin:0">Doelwinst ${jaarNu} (€)</label>
       <input id="gps_doel" type="number" step="5000" min="0" value="${gps.doel ?? ''}" placeholder="bijv. 150000" style="width:120px"></span></div>
       ${gpsHtml}</div>
+
+    <div class="grid cols-2 mb">
+      <div class="panel"><h2>🧮 Investeringsbeslisser <span class="muted">— kan ik dit veroorloven?</span> ${uitlegChip('invest')}</h2>
+        <div id="investDyn">${investHtml()}</div></div>
+      <div class="panel"><h2>📅 13-weken cashflow <span class="muted">— grip op de timing</span> ${uitlegChip('week13')}</h2>
+        ${weekCashHtml()}</div>
+    </div>
 
     <div id="cfDyn">${cfDynHtml(sc)}</div>
 
@@ -627,6 +712,7 @@ function renderCashflow(root) {
   $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Jaardoel opgeslagen ✓'); rerender(); };
   wireUitkeer();
   wireKeten();
+  wireInvest();
   $('#sc_load').onchange = e => cfLoadScenario(e.target.value);
   $('#sc_save').onclick = openSaveScenario;
   $('#sc_star').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een opgeslagen scenario', true); cfSetDefaultScenario(n); };

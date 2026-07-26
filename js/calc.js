@@ -1023,3 +1023,110 @@ function projectie(maanden = 12, scenario = {}) {
   const eind = rows[rows.length - 1].saldo;
   return { rows, start, eind, laagste, negatief, runway, scenario: sc, gemFee, blijfkans: blijf, behoudDefault };
 }
+
+// ── Investeringsbeslisser: "kan ik dit (nu) veroorloven?" ──────
+function investeringsRuimte() {
+  const saldo = D.saldi[0] ? Number(D.saldi[0].saldo) : 0;
+  const pot = potjes();
+  const vrij = saldo - pot.btwPot - pot.vpbPot;               // na belastingpotjes
+  const vaste = budgetVoorMaand(monthKey(todayISO()));
+  const euroBuffer = Number(S('cash_buffer_min', 10000));     // gewenst minimum banksaldo (uitkeer-planner)
+  const proj = projectie(12);
+  const laagste = proj.laagste.saldo;                         // krapste punt komende 12 mnd
+  const ruimteNu = Math.max(0, laagste - euroBuffer);         // vrij te investeren zonder onder je buffer te zakken
+  const bufferMnd = vaste ? vrij / vaste : 0;
+  const netto6 = proj.rows.slice(0, 6).reduce((s, r) => s + (r.inTot - r.uitTot), 0) / 6;
+  return { saldo, vrij, vaste, euroBuffer, laagste, laagsteLabel: proj.laagste.label, ruimteNu, bufferMnd, netto6, runway: proj.runway };
+}
+
+// opts: { eenmalig, maandlast, extraOmzetPm } — bijv. recruiter = maandlast + verwachte extra omzet
+function investeringsCheck({ eenmalig = 0, maandlast = 0, extraOmzetPm = 0 } = {}) {
+  const r = investeringsRuimte();
+  const gemFee = kpis().gemFee || Number(S('scenario_gem_fee', 8500));
+  const projNa = projectie(12, { extraHirePm: maandlast, extraHireVanaf: 0 });
+  const laagsteNa = projNa.laagste.saldo - eenmalig;          // eenmalige uitgave drukt het hele pad omlaag
+  const bufferNaMnd = r.vaste ? (r.vrij - eenmalig) / (r.vaste + maandlast) : 0;
+  const breakEvenVoor = gemFee ? r.vaste / gemFee : null;
+  const breakEvenNa = gemFee ? (r.vaste + maandlast) / gemFee : null;
+  const nettoPerMnd = extraOmzetPm - maandlast;              // maandelijkse winstbijdrage
+  const payback = eenmalig > 0 && nettoPerMnd > 0 ? eenmalig / nettoPerMnd : null;
+  const haalbaarNu = laagsteNa >= r.euroBuffer;              // blijf je op het krapste moment boven je buffer?
+  const tekort = Math.max(0, r.euroBuffer - laagsteNa);
+  const maandenTot = tekort > 0 ? (r.netto6 > 0 ? Math.ceil(tekort / r.netto6) : null) : 0;
+  return { r, eenmalig, maandlast, extraOmzetPm, gemFee, laagsteVoor: r.laagste, laagsteNa,
+    bufferVoorMnd: r.bufferMnd, bufferNaMnd, breakEvenVoor, breakEvenNa, nettoPerMnd, payback,
+    haalbaarNu, tekort, maandenTot, runwayNa: projNa.runway };
+}
+
+// ── 13-weken cashflow (week-voor-week banksaldo) ───────────────
+function btwVoorKwartaal(qEndMk) {   // qEndMk = 'YYYY-MM' = laatste maand van het kwartaal
+  const btwPct = Number(S('btw_pct', .21));
+  const y = qEndMk.slice(0, 4), em = +qEndMk.slice(5, 7);
+  let ontv = 0;
+  for (let j = 2; j >= 0; j--) {
+    const mk = `${y}-${String(em - j).padStart(2, '0')}`;
+    ontv += D.installments.filter(x => (x.factuurdatum || '').slice(0, 7) === mk && (x.status === 'gefactureerd' || x.status === 'betaald'))
+      .reduce((s, x) => s + +x.bedrag_excl, 0) * btwPct;
+    ontv += flexInMaand(mk + '-01') * btwPct;
+  }
+  return Math.max(0, ontv - Number(S('voorbelasting_pm', 0)) * 3);
+}
+function weekProjectie(weken = 13) {
+  const t = todayISO();
+  const btwPct = Number(S('btw_pct', .21));
+  const start = D.saldi[0] ? Number(D.saldi[0].saldo) : 0;
+  const weeks = [];
+  for (let i = 0; i < weken; i++) weeks.push({ i, start: addDays(t, i * 7), eind: addDays(t, i * 7 + 6), in: 0, uit: 0, items: [] });
+  const idx = iso => { const d = daysBetween(t, iso); return d < 0 ? 0 : Math.floor(d / 7); };
+  const add = (iso, kant, bedrag, label) => { const wi = idx(iso); if (wi >= 0 && wi < weken && bedrag) { weeks[wi][kant] += bedrag; weeks[wi].items.push({ label, bedrag: kant === 'uit' ? -bedrag : bedrag }); } };
+  // ontvangsten uit het factuurschema (incl. btw)
+  for (const p of D.placements) for (const inst of instOf(p.id)) {
+    if (inst.status === 'betaald' || inst.status === 'vervallen') continue;
+    let dat = null;
+    if (inst.status === 'te_factureren' && inst.geplande_datum) dat = addDays(inst.geplande_datum, p.betaaltermijn_dgn || 14);
+    else if (inst.status === 'gefactureerd') { const vv = vervaldatum(inst, p) || t; dat = vv < t ? addDays(t, 14) : vv; }
+    if (dat) add(dat, 'in', +inst.bedrag_excl * (1 + btwPct), `💶 ${p.kandidaat} · ${p.klant}`);
+  }
+  // flex-weekmarge (incl. btw)
+  const flexWk = flexStats().maandRunRate * 12 / 52 * (1 + btwPct);
+  weeks.forEach(w => { if (flexWk) { w.in += flexWk; w.items.push({ label: '🟢 Flex-marge', bedrag: flexWk }); } });
+  // vaste lasten (gespreid per week)
+  const vasteWk = budgetVoorMaand(monthKey(t)) * 12 / 52;
+  weeks.forEach(w => { if (vasteWk) { w.uit += vasteWk; w.items.push({ label: '🏢 Vaste lasten', bedrag: -vasteWk }); } });
+  // btw-afdrachten (jan/apr/jul/okt) — btw vorig kwartaal op de laatste dag van de maand
+  for (let m = 0; m < 4; m++) {
+    const mk = addMonths(monthKey(t), m), maand = +mk.slice(5, 7);
+    if (![1, 4, 7, 10].includes(maand)) continue;
+    const laatsteDag = addDays(addMonths(mk + '-01', 1), -1);
+    if (laatsteDag < t) continue;
+    const qEnd = addMonths(mk + '-01', -1).slice(0, 7);
+    add(laatsteDag, 'uit', btwVoorKwartaal(qEnd), `🧾 Btw-afdracht Q${Math.floor((+qEnd.slice(5, 7) - 1) / 3) + 1}`);
+  }
+  // geplande aflossingen
+  for (const lp of D.loanPayments) if (lp.gepland && lp.datum >= t) add(lp.datum, 'uit', +lp.bedrag, '🏦 Aflossing');
+  let saldo = start;
+  weeks.forEach(w => { w.netto = w.in - w.uit; saldo += w.netto; w.saldo = saldo; });
+  const laagste = weeks.reduce((a, w) => w.saldo < a.saldo ? w : a, weeks[0]);
+  return { start, weken, weeks, laagste, eind: weeks[weken - 1].saldo };
+}
+
+// ── CFO-briefing: 3–4 zinnen "wat een adviseur maandagochtend zou zeggen" ──
+function cfoBriefing() {
+  const r = investeringsRuimte(), wk = weekProjectie(13), bel = belastingAdvies();
+  const top = adviesEngine().filter(a => a.urg >= 2);
+  const z = [];
+  z.push(r.bufferMnd >= 3
+    ? { k: 'ok', t: `Je staat er gezond bij: ${r.bufferMnd.toFixed(1)} maanden buffer en ${eur(r.vrij)} vrij besteedbaar na belastingpotjes.` }
+    : { k: 'warn', t: `Let op je buffer: ${r.bufferMnd.toFixed(1)} maand vaste lasten — onder de norm van 3. Vul die aan vóór grote uitgaven.` });
+  z.push(wk.laagste && wk.laagste.saldo < r.euroBuffer
+    ? { k: 'warn', t: `Krapste moment komende 13 weken: week van ${fmtD(wk.laagste.start)}, saldo zakt naar ${eur(wk.laagste.saldo)} — plan grote uitgaven daaromheen.` }
+    : { k: 'ok', t: `Je kas blijft de komende 13 weken boven je buffer (laagste ${eur(wk.laagste.saldo)}).` });
+  z.push(r.ruimteNu > 5000
+    ? { k: 'kans', t: `Ruimte om te investeren: ~${eur(r.ruimteNu)} bovenop je buffer. Reken een concrete keuze door bij Cashflow → Investeringsbeslisser.` }
+    : { k: 'warn', t: `Nog geen investeringsruimte — je zit tegen je buffer aan. Focus op incasso en omzet.` });
+  if (bel.loonIngevuldOk && bel.loonTekort > 0)
+    z.push({ k: 'warn', t: `DGA-loon loopt achter op het gebruikelijk loon (tekort ~${eur(bel.loonTekort)}) — bespreek vóór 31 dec met je boekhouder.` });
+  else if (top[0])
+    z.push({ k: top[0].cat === 'gevaar' ? 'warn' : 'kans', t: `Belangrijkst deze week: ${top[0].titel} — ${top[0].actie || top[0].tekst}` });
+  return z.slice(0, 4);
+}
