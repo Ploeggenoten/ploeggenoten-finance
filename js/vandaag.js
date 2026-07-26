@@ -5,8 +5,6 @@ function renderVandaag(root) {
   const saldo = D.saldi[0];
   const vrij = saldo ? Number(saldo.saldo) - pot.btwPot - pot.vpbPot : null;
   const lijst = acties();
-  const proj = projectie(12);
-
   const fx = flexStats();
   const tgt = targetInfo();
   const kpiHtml = `
@@ -62,19 +60,13 @@ function renderVandaag(root) {
     <div class="pot"><span>Winst-indicatie YTD${S('yuki_synced_at') ? ' <span class="muted">(live uit Yuki)</span>' : ''}</span><b>${eur(pot.winstYtd)}</b></div>
     ${bw && bw.crediteuren > 0 ? `<div class="pot"><span>Nog te betalen inkoopfacturen (Yuki)</span><b>${eur(bw.crediteuren)}</b></div>` : ''}`;
 
-  const top = adviesEngine().filter(a => a.urg >= 2).slice(0, 4);
-  const iconOf = { gevaar: '🔴', kans: '🟡', sterkte: '🟢' };
-  const adviesHtml = (top.length ? top.map(a =>
-    `<div class="pot"><span>${iconOf[a.cat]} <b>${esc(a.titel)}</b> — ${esc(a.cijfer || '')}<br><span class="muted">${esc(a.actie || a.tekst)}</span></span></div>`).join('')
-    : `<div class="pot"><span>🟢 Geen urgente signalen. Laagste saldopunt komende 12 mnd: <b>${eur(proj.laagste.saldo)}</b> (${esc(proj.laagste.label)}).</span></div>`)
-    + `<div class="mt right"><button class="btn small" id="naarAdvies">Alle adviezen →</button></div>`;
-
   const brief = cfoBriefing();
   const briefIco = { ok: '🟢', warn: '🟠', kans: '🟡' };
   const briefHtml = `
     <div class="panel mb" style="border-left:4px solid var(--accent);background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
       <h2 style="margin:0 0 8px">🧭 Je CFO deze week <span class="muted" style="font-weight:400">— ${fmtD(todayISO())}</span></h2>
       ${brief.map(z => `<div style="display:flex;gap:8px;align-items:flex-start;margin:5px 0"><span>${briefIco[z.k] || '•'}</span><span>${z.t}</span></div>`).join('')}
+      <div class="mt right"><button class="btn small" id="naarAdvies">Alle adviezen →</button></div>
     </div>`;
 
   root.innerHTML = `
@@ -85,7 +77,6 @@ function renderVandaag(root) {
     <div class="grid cols-2 mt">
       <div class="panel"><h2>📌 Acties ${uitlegChip('v_acties')}</h2>${actieHtml}</div>
       <div>
-        <div class="panel mb"><h2>🧠 Advies van je finance agent ${uitlegChip('v_agent')}</h2>${adviesHtml}</div>
         <div class="panel mb"><h2>💰 Belastingpotjes ${uitlegChip('v_potjes')}</h2>${potHtml}</div>
         <div class="panel"><h2>⚠️ Risico's ${uitlegChip('v_risico')}</h2>${risicoHtml}</div>
       </div>
