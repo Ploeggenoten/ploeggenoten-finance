@@ -304,6 +304,50 @@ function belastingAdvies() {
   };
 }
 
+// netto-calculator: wat houd je over als salaris (box 1) vs dividend (Vpb + box 2)
+function progVpb(w) { const g = FISCAAL.vpb; return w <= g.grens ? w * g.laag : g.grens * g.laag + (w - g.grens) * g.hoog; }
+function progBox1(van, tot) { const b = FISCAAL.box1, f = x => x <= b.grens1 ? x * b.schijf1 : b.grens1 * b.schijf1 + (x - b.grens1) * b.top; return f(tot) - f(van); }
+function progBox2(van, tot) { const b = FISCAAL.box2, f = x => x <= b.grens ? x * b.laag : b.grens * b.laag + (x - b.grens) * b.hoog; return f(tot) - f(van); }
+function salarisDividendCalc(winst, huidigBox1 = 0) {
+  winst = Math.max(0, winst);
+  const box1Extra = progBox1(huidigBox1, huidigBox1 + winst);
+  const nettoSalaris = winst - box1Extra;
+  const vpb = progVpb(winst), naVpb = winst - vpb, box2 = progBox2(0, naVpb), nettoDividend = naVpb - box2;
+  return { winst, huidigBox1, box1Extra, nettoSalaris, vpb, box2, nettoDividend,
+    beste: nettoSalaris >= nettoDividend ? 'salaris' : 'dividend', verschil: Math.abs(nettoSalaris - nettoDividend),
+    pctSalaris: winst ? nettoSalaris / winst : 0, pctDividend: winst ? nettoDividend / winst : 0 };
+}
+let _sd = null;
+function sdCalcHtml() {
+  const bel = belastingAdvies();
+  if (!_sd) _sd = { bedrag: 25000, box1: Math.round(bel.loonHeelJaar || FISCAAL.gebruikelijkLoon) };
+  const c = salarisDividendCalc(_sd.bedrag, _sd.box1);
+  const win = k => c.beste === k ? 'border-color:var(--accent);border-width:2px' : 'border-color:var(--line)';
+  return `
+    <div class="grid cols-2 mb" style="gap:10px">
+      <label class="muted" style="font-size:12px;display:block">Bedrag uit de BV halen (winst) €<br><input id="sd_bedrag" type="number" min="0" step="1000" value="${_sd.bedrag}" style="width:100%"></label>
+      <label class="muted" style="font-size:12px;display:block">Je huidige bruto jaarinkomen box 1 €<br><input id="sd_box1" type="number" min="0" step="1000" value="${_sd.box1}" style="width:100%"></label>
+    </div>
+    <div class="grid cols-2" style="gap:10px">
+      <div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;${win('salaris')}">
+        <div class="muted" style="font-size:11px;text-transform:uppercase">Als salaris (box 1)${c.beste === 'salaris' ? ' ✅' : ''}</div>
+        <div style="font-size:19px;font-weight:700">${eur(c.nettoSalaris)} <span class="muted" style="font-size:12px;font-weight:400">netto (${Math.round(c.pctSalaris * 100)}%)</span></div>
+        <div class="muted" style="font-size:11px">belasting box 1: ${eur(c.box1Extra)}</div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;${win('dividend')}">
+        <div class="muted" style="font-size:11px;text-transform:uppercase">Als dividend (Vpb + box 2)${c.beste === 'dividend' ? ' ✅' : ''}</div>
+        <div style="font-size:19px;font-weight:700">${eur(c.nettoDividend)} <span class="muted" style="font-size:12px;font-weight:400">netto (${Math.round(c.pctDividend * 100)}%)</span></div>
+        <div class="muted" style="font-size:11px">Vpb ${eur(c.vpb)} + box 2 ${eur(c.box2)}</div>
+      </div>
+    </div>
+    <p class="muted mt" style="font-size:12px">👉 Voordeligst: <b>${c.beste}</b> — scheelt netto ~<b>${eur(c.verschil)}</b> op ${eur(c.winst)}. Indicatie zónder heffingskortingen en zónder het gebruikelijk-loon-minimum; je boekhouder rekent de exacte optimale mix.</p>`;
+}
+function wireSdCalc() {
+  const wrap = document.querySelector('#sdCalcDyn'); if (!wrap) return;
+  const bind = (id, f) => { const el = wrap.querySelector(id); if (el) el.oninput = e => { _sd[f] = Math.max(0, Number(e.target.value) || 0); wrap.innerHTML = sdCalcHtml(); wireSdCalc(); }; };
+  bind('#sd_bedrag', 'bedrag'); bind('#sd_box1', 'box1');
+}
+
 function renderAdvies(root) {
   const items = adviesEngine();
   const cijfers = adviseurCijfers();
@@ -348,7 +392,11 @@ function renderAdvies(root) {
           <tr><td>Loon uitkeren — box 1</td><td class="num">${p1(F.box1.schijf1)} tot ${eur(F.box1.grens1)} · ${p1(F.box1.top)} daarboven</td></tr>
           <tr><td>In BV laten → later dividend (box 2)</td><td class="num">${p1(bel.bvRouteTarief)} tot ${eur(F.box2.grens)} · ${p1(1 - (1 - F.vpb.laag) * (1 - F.box2.hoog))} daarboven</td></tr>
         </table></div>
-        <p class="muted mt" style="font-size:12px">Vuistregel: de <b>eerste ±${eur(F.box1.grens1)}</b> salaris is vaak iets voordeliger dan in de BV laten; dáárboven wint dividend meestal. Het is een <b>verschuiving</b>, geen gratis besparing. 👉 De exacte optimale mix (met heffingskortingen) rekent je boekhouder door.</p>
+        <p class="muted mt" style="font-size:12px">Vuistregel: de <b>eerste ±${eur(F.box1.grens1)}</b> salaris is vaak iets voordeliger dan in de BV laten; dáárboven wint dividend meestal. Het is een <b>verschuiving</b>, geen gratis besparing.</p>
+        <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">
+          <b style="font-size:13px">🧮 Netto-calculator</b> <span class="muted" style="font-size:12px">— wat houd je echt over?</span>
+          <div id="sdCalcDyn" style="margin-top:8px">${sdCalcHtml()}</div>
+        </div>
       </div>
       <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">
         <b>📅 Nog ${bel.mndTotEind} maand${bel.mndTotEind === 1 ? '' : 'en'} om ${F.jaar} te sturen</b>
@@ -426,6 +474,7 @@ function renderAdvies(root) {
       <div class="panel"><h2>👥 Team & snelheid ${uitlegChip('a_team')}</h2>${teamHtml}</div>
     </div>`;
 
+  wireSdCalc();
   root.addEventListener('change', async e => {
     if (e.target.id === 'bel_loon') { await saveSetting('dga_loon_pm', Math.max(0, Number(e.target.value) || 0)); toast('DGA-loon opgeslagen ✓'); return rerender(); }
     if (e.target.id === 'bel_start') { await saveSetting('dga_start_maand', Number(e.target.value) || 0); toast('Startmaand opgeslagen ✓'); return rerender(); }

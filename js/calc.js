@@ -1112,9 +1112,17 @@ function weekProjectie(weken = 13) {
 
 // ── CFO-briefing: 3–4 zinnen "wat een adviseur maandagochtend zou zeggen" ──
 function cfoBriefing() {
-  const r = investeringsRuimte(), wk = weekProjectie(13), bel = belastingAdvies();
+  const r = investeringsRuimte(), wk = weekProjectie(13), bel = belastingAdvies(), pot = potjes();
   const top = adviesEngine().filter(a => a.urg >= 2);
   const z = [];
+  const reservering = pot.btwPot + pot.vpbPot;
+  const belAlert = r.saldo > 0 && reservering > 0
+    ? (r.saldo < reservering
+        ? { k: 'warn', t: `🚨 Je belastingreservering (${eur(reservering)} btw+Vpb) is gróter dan je banksaldo (${eur(r.saldo)}) — je btw/Vpb loopt vóór op je cash. Houd uitgaven vast tot dit gedekt is.` }
+        : r.vrij < reservering * 0.3
+          ? { k: 'warn', t: `⚠️ Van je saldo (${eur(r.saldo)}) is ${eur(reservering)} al belasting (btw+Vpb) — er blijft maar ${eur(r.vrij)} vrij over. Reserveer dat apart en geef het niet uit.` }
+          : null)
+    : null;
   z.push(r.bufferMnd >= 3
     ? { k: 'ok', t: `Je staat er gezond bij: ${r.bufferMnd.toFixed(1)} maanden buffer en ${eur(r.vrij)} vrij besteedbaar na belastingpotjes.` }
     : { k: 'warn', t: `Let op je buffer: ${r.bufferMnd.toFixed(1)} maand vaste lasten — onder de norm van 3. Vul die aan vóór grote uitgaven.` });
@@ -1128,5 +1136,6 @@ function cfoBriefing() {
     z.push({ k: 'warn', t: `DGA-loon loopt achter op het gebruikelijk loon (tekort ~${eur(bel.loonTekort)}) — bespreek vóór 31 dec met je boekhouder.` });
   else if (top[0])
     z.push({ k: top[0].cat === 'gevaar' ? 'warn' : 'kans', t: `Belangrijkst deze week: ${top[0].titel} — ${top[0].actie || top[0].tekst}` });
+  if (belAlert) z.unshift(belAlert);   // belastingreservering-achterstand altijd vooraan
   return z.slice(0, 4);
 }
