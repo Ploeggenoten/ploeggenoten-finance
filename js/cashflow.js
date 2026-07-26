@@ -90,10 +90,6 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> alles wat vandaag je aandacht vraagt: factureren, late betalers, plaatsingen afronden, stops verwerken.</p>
     <p><b>Hoe berekend:</b> automatisch uit je factuurschema, garanties en signalen van het bord. Rood = urgent.</p>
     <p><b>Hoe sturen:</b> werk deze lijst leeg — elke actie is geld dat binnenkomt of een risico dat je afdekt.</p>` },
-  v_agent: { t: '🧠 Advies van je finance agent', h: `
-    <p><b>Wat je ziet:</b> de belangrijkste kansen, gevaren en sterktes die de app in je cijfers ziet.</p>
-    <p><b>Hoe berekend:</b> recruitment-vuistregels (buffer, klantconcentratie, stop-percentage, break-even, seizoenseffecten) toegepast op je eigen data.</p>
-    <p><b>Hoe sturen:</b> begin je week hiermee; het tabblad Advies geeft de volledige lijst met onderbouwing.</p>` },
   v_potjes: { t: '💰 Belastingpotjes', h: `
     <p><b>Wat je ziet:</b> hoeveel je opzij moet zetten voor btw en vennootschapsbelasting, en je winst-indicatie.</p>
     <p><b>Hoe berekend:</b> btw = ontvangen btw dit kwartaal − voorbelasting; Vpb = % over je winst YTD (liefst verankerd op Yuki).</p>
