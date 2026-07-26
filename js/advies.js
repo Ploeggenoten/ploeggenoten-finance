@@ -272,9 +272,15 @@ const FISCAAL = {
   box1: { schijf1: 0.3582, grens1: 38441, top: 0.495 },
 };
 function belastingAdvies() {
-  const t = todayISO(), y = +t.slice(0, 4), mnd = +t.slice(5, 7);
+  const t = todayISO(), y = +t.slice(0, 4), mnd = +t.slice(5, 7), dag = +t.slice(8, 10);
   const pot = potjes();
   const F = FISCAAL;
+  // huidig kwartaal (waarop het btw-potje loopt) + hoe ver we erin zijn
+  const kw = Math.floor((mnd - 1) / 3) + 1;
+  const kwStartMnd = (kw - 1) * 3 + 1;
+  const dagenInKw = (mnd - kwStartMnd) * 30 + dag;
+  const mndNaam = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  const kwLabel = `Q${kw} ${y} (${mndNaam[kwStartMnd - 1]}–${mndNaam[kwStartMnd + 1]})`;
   // Vpb over de jaarwinst
   const winst = pot.winstYtd;
   const vpbTarief = winst > F.vpb.grens ? F.vpb.hoog : F.vpb.laag;
@@ -292,6 +298,7 @@ function belastingAdvies() {
   return {
     F, winst, vpbTarief, vpbReservering,
     btwKwartaal: pot.btwPot, btwOntvangen: pot.btwOntvangen, voorbelasting: pot.voorbelasting,
+    kwLabel, dagenInKw,
     loonPm, startMnd, loonHeelJaar, loonTekort, loonIngevuldOk: loonPm > 0 && startMnd > 0,
     mndTotEind, bvRouteTarief,
   };
@@ -310,9 +317,10 @@ function renderAdvies(root) {
     <div class="panel mb"><h2>🧾 Belasting & DGA <span class="muted">— je twee belastingen uit elkaar</span> ${uitlegChip('a_belasting')}</h2>
       <div class="grid cols-2" style="gap:12px;margin-bottom:12px">
         <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--accent)">
-          <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">🔁 Btw · omzetbelasting</div>
-          <div style="font-size:20px;font-weight:700;margin:2px 0">${eur(bel.btwKwartaal)}</div>
-          <div class="muted" style="font-size:12px">te betalen dit kwartaal (indicatie). <b>Doorgeefgeld</b> — je int 21% van klanten en stort door, minus voorbelasting. Staat <b>los</b> van je winst, je kosten én je DGA-loon.</div>
+          <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">🔁 Btw · dit kwartaal ${bel.kwLabel}</div>
+          <div style="font-size:20px;font-weight:700;margin:2px 0">${eur(bel.btwKwartaal)} <span class="muted" style="font-size:12px;font-weight:400">opgebouwd (dag ${bel.dagenInKw})</span></div>
+          <div class="muted" style="font-size:12px"><b>Dit is een lopende teller</b>, geen rekening — dit kwartaal loopt nog en groeit door tot je aan het eind afdraagt. <b>Doorgeefgeld</b> (21% van klanten − voorbelasting), staat <b>los</b> van winst, kosten en DGA-loon.</div>
+          <div class="muted" style="font-size:12px;margin-top:6px;border-top:1px dashed var(--line);padding-top:6px">📌 De aangifte die je <b>nu</b> betaalt is het <b>vorige</b> kwartaal (afgesloten) — dat bedrag staat in Yuki, niet hier.</div>
         </div>
         <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--amber)">
           <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">📊 Vpb · winstbelasting ${F.jaar}</div>
