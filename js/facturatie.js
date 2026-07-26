@@ -2,30 +2,6 @@
 
 let factFilter = { status: 'actueel', klant: '' };
 
-// te betalen inkoopfacturen — live uit Yuki (fin_yuki_open, soort=crediteur)
-function crediteurenHtml() {
-  const sync = S('yuki_synced_at');
-  const cred = (D.yukiOpen || []).filter(r => r.soort === 'crediteur' && Math.abs(+r.open_bedrag) > 0.005);
-  if (!cred.length) return `<div class="panel mb"><h2>💳 Te betalen — inkoopfacturen <span class="muted">— live uit Yuki</span></h2>
-    <div class="empty">Geen openstaande inkoopfacturen in Yuki${sync ? ` (laatst gesynct ${fmtD(sync.slice(0, 10))})` : ''}.</div></div>`;
-  const t = todayISO();
-  const rows = [...cred].sort((a, b) => String(a.vervaldatum || '9999').localeCompare(String(b.vervaldatum || '9999')));
-  const totaal = rows.reduce((s, r) => s + +r.open_bedrag, 0);
-  const teLaat = rows.filter(r => r.vervaldatum && r.vervaldatum < t && +r.open_bedrag > 0);
-  const teLaatBed = teLaat.reduce((s, r) => s + +r.open_bedrag, 0);
-  return `<div class="panel mb"><div class="spread mb"><h2>💳 Te betalen — inkoopfacturen <span class="muted">— live uit Yuki</span></h2>
-      <span class="muted">${rows.length} facturen · totaal <b>${eur(totaal)}</b>${teLaat.length ? ` · <span style="color:var(--red)">${teLaat.length} over vervaldatum (${eur(teLaatBed)})</span>` : ''}</span></div>
-    <div class="table-wrap"><table>
-      <tr><th>Leverancier</th><th>Omschrijving</th><th>Vervaldatum</th><th class="num">Open bedrag</th></tr>
-      ${rows.map(r => { const laat = r.vervaldatum && r.vervaldatum < t && +r.open_bedrag > 0;
-        return `<tr><td><b>${esc(r.contact || '—')}</b></td><td class="muted">${esc((r.omschrijving || '').slice(0, 52))}</td>
-        <td>${r.vervaldatum ? fmtD(r.vervaldatum) : '—'} ${laat ? tag('te laat', 'red') : ''}</td>
-        <td class="num"><b>${eur(r.open_bedrag)}</b></td></tr>`; }).join('')}
-      <tr><td colspan="3" class="right"><b>Totaal open</b></td><td class="num"><b>${eur(totaal)}</b></td></tr>
-    </table></div>
-    <p class="muted mt" style="font-size:12px">Rechtstreeks uit Yuki (OutstandingCreditorItems)${sync ? `, laatst gesynct ${fmtD(sync.slice(0, 10))}` : ''}. Puur inzicht — betalen doe je in je bank/Yuki. Een negatief bedrag = creditfactuur (leverancier moet jóu nog).</p></div>`;
-}
-
 function renderFacturatie(root) {
   const btw = 1 + Number(S('btw_pct', .21));
   const t = todayISO();
@@ -88,7 +64,6 @@ function renderFacturatie(root) {
           ${klanten.map(k => `<option ${factFilter.klant === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
         </select>
       </div></div>
-    ${crediteurenHtml()}
     ${blokken || '<div class="empty">Niets gevonden met dit filter.</div>'}`;
 
   $('#fFilter').onchange = e => { factFilter.status = e.target.value; rerender(); };
