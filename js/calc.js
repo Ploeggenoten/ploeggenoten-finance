@@ -1024,6 +1024,54 @@ function projectie(maanden = 12, scenario = {}) {
   return { rows, start, eind, laagste, negatief, runway, scenario: sc, gemFee, blijfkans: blijf, behoudDefault };
 }
 
+// ── Datakwaliteit-check: wat klopt er niet / mist er? ──────────
+function dataKwaliteit() {
+  const issues = [], t = todayISO();
+  const add = (ernst, titel, detail) => issues.push({ ernst, titel, detail });
+
+  // dubbele recruiternamen (schrijfwijze) op het bord
+  const recMap = {};
+  (D.candidates || []).forEach(c => { const r = (c.rec || '').trim(); if (r) { const k = r.toLowerCase(); (recMap[k] = recMap[k] || new Set()).add(r); } });
+  const dubbelRec = Object.values(recMap).filter(s => s.size > 1).map(s => [...s].join(' / '));
+  if (dubbelRec.length) add('warn', 'Dubbele recruiternamen', `${dubbelRec.join(', ')} — zelfde persoon, andere schrijfwijze; team-cijfers tellen apart. Corrigeer op het pijplijnbord.`);
+
+  // DGA-loon niet ingevuld
+  if (!Number(S('dga_loon_pm', 0))) add('warn', 'DGA-loon niet ingevuld', 'De gebruikelijkloon-check staat op €0. Vul je bruto DGA-loon + startmaand in bij Advies → Belasting & DGA.');
+
+  // klanten met plaatsingen maar geen tarief
+  const klanten = [...new Set(D.placements.map(p => p.klant).filter(Boolean))];
+  const zonderTarief = klanten.filter(k => !tariefVoor(k, null));
+  if (zonderTarief.length) add('warn', 'Klanten zonder W&S-tarief', `${zonderTarief.join(', ')} — plaatsingen komen met een geschatte fee binnen. Vul in bij Instellingen → W&S-tarieven.`);
+
+  // concepten nog niet bevestigd
+  const conc = D.placements.filter(p => p.concept);
+  if (conc.length) add('info', `${conc.length} concept-plaatsing(en) niet bevestigd`, conc.map(p => `${p.id} (${p.kandidaat})`).join(', ') + ' — controleer fee + factuurschema en bevestig.');
+
+  // lege €0-termijnen
+  const lege = D.installments.filter(i => i.status === 'te_factureren' && Number(i.bedrag_excl || 0) === 0);
+  if (lege.length) { const pids = [...new Set(lege.map(i => i.placement_id))]; add('warn', `${lege.length} lege termijn(en) van €0`, `Bij ${pids.join(', ')} — waarschijnlijk per ongeluk toegevoegd. Open de plaatsing → verwijderen of herverdelen.`); }
+
+  // plaatsingen zonder termijnen (niet-concept)
+  const zonderT = D.placements.filter(p => !p.concept && instOf(p.id).length === 0);
+  if (zonderT.length) add('warn', `${zonderT.length} plaatsing(en) zonder factuurschema`, zonderT.map(p => p.id).join(', ') + ' — geen termijnen. Open en zet een schema.');
+
+  // mogelijk dubbele plaatsingen (zelfde kandidaat + klant)
+  const seen = {}, dup = [];
+  D.placements.forEach(p => { const k = `${(p.kandidaat || '').toLowerCase()}|${(p.klant || '').toLowerCase()}`; if (seen[k]) dup.push(`${p.kandidaat} · ${p.klant}`); else seen[k] = 1; });
+  if (dup.length) add('info', 'Mogelijk dubbele plaatsingen', [...new Set(dup)].join(', ') + ' — check of het een heraanbieding/vervanging is.');
+
+  // Yuki crediteuren lang over vervaldatum (reconciliatie-gap)
+  const oudeCred = (D.yukiOpen || []).filter(r => r.soort === 'crediteur' && r.vervaldatum && r.vervaldatum < addDays(t, -60) && +r.open_bedrag > 0);
+  if (oudeCred.length) add('info', `${oudeCred.length} inkoopfactuur(en) >60 dgn over vervaldatum in Yuki`, 'Waarschijnlijk al betaald maar niet gematcht in Yuki (reconciliatie-gap). Bespreek met je boekhouder.');
+
+  // Yuki-sync versheid
+  const sync = S('yuki_synced_at');
+  if (!sync) add('warn', 'Yuki nog niet gesynchroniseerd', 'Winst/saldo/crediteuren komen niet binnen. Ververs via Instellingen → Yuki-koppeling.');
+  else if (daysBetween(sync.slice(0, 10), t) > 3) add('info', 'Yuki-cijfers verouderd', `Laatst gesynct ${fmtD(sync.slice(0, 10))}. Ververs voor actuele cijfers.`);
+
+  return issues;
+}
+
 // ── Investeringsbeslisser: "kan ik dit (nu) veroorloven?" ──────
 function investeringsRuimte() {
   const saldo = D.saldi[0] ? Number(D.saldi[0].saldo) : 0;

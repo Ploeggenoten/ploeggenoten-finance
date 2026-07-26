@@ -37,8 +37,20 @@ function renderInstellingen(root) {
     <td class="right"><button class="btn small ghost" data-tedit="${r.id}">✎</button>
     <button class="btn small ghost" data-tdel="${r.id}">✕</button></td></tr>`).join('');
 
+  const dq = dataKwaliteit();
+  const dqIco = { warn: '🟠', info: '🔵' };
+  const dqHtml = dq.length
+    ? dq.map(i => `<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)">
+        <span>${dqIco[i.ernst] || '•'}</span>
+        <div><b>${esc(i.titel)}</b><br><span class="muted" style="font-size:13px">${esc(i.detail)}</span></div></div>`).join('')
+    : `<div class="empty">✅ Geen datapunten die aandacht nodig hebben — netjes op orde.</div>`;
+
   root.innerHTML = `
     <h1>Instellingen</h1>
+    <div class="panel mt mb" style="border-left:4px solid ${dq.some(i => i.ernst === 'warn') ? 'var(--amber)' : 'var(--green)'}">
+      <h2>🩺 Datakwaliteit ${dq.length ? `<span class="muted">— ${dq.length} punt${dq.length === 1 ? '' : 'en'}</span>` : ''}</h2>
+      <p class="muted" style="font-size:13px;margin:2px 0 8px">Je analyses zijn zo goed als je data. Dit checkt wat mist of niet klopt.</p>
+      ${dqHtml}</div>
     <div class="panel mt mb"><div class="spread mb"><h2>💼 W&S-tarieven per klant</h2>
       <button class="btn primary small" id="tNieuw">+ Tarief</button></div>
       <div class="table-wrap"><table>
