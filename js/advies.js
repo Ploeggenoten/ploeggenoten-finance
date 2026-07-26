@@ -262,6 +262,41 @@ function adviseurCijfers() {
   ];
 }
 
+// ── Belasting & DGA (signalering + rekenhulp, GEEN advies) ─────
+// Tarieven 2026 — laat je boekhouder de exacte bedragen bevestigen; jaarlijks aan te passen.
+const FISCAAL = {
+  jaar: 2026,
+  gebruikelijkLoon: 58000,                       // norm DGA 2026
+  vpb: { laag: 0.19, grens: 200000, hoog: 0.258 },
+  box2: { laag: 0.245, grens: 68843, hoog: 0.31 },
+  box1: { schijf1: 0.3582, grens1: 38441, top: 0.495 },
+};
+function belastingAdvies() {
+  const t = todayISO(), y = +t.slice(0, 4), mnd = +t.slice(5, 7);
+  const pot = potjes();
+  const F = FISCAAL;
+  // Vpb over de jaarwinst
+  const winst = pot.winstYtd;
+  const vpbTarief = winst > F.vpb.grens ? F.vpb.hoog : F.vpb.laag;
+  const vpbReservering = Math.max(0, winst) * F.vpb.laag;   // conservatief op laag tarief
+  // DGA-gebruikelijkloon
+  const loonPm = Number(S('dga_loon_pm', 0)) || 0;
+  const startMnd = Number(S('dga_start_maand', 0)) || 0;    // 1–12, 0 = niet ingesteld
+  const maandenHeelJaar = startMnd ? (12 - startMnd + 1) : 0;
+  const loonHeelJaar = loonPm * maandenHeelJaar;
+  const loonTekort = Math.max(0, F.gebruikelijkLoon - loonHeelJaar);
+  // maanden tot jaareinde
+  const mndTotEind = 12 - mnd;
+  // winst vs uitkeren (indicatief)
+  const bvRouteTarief = 1 - (1 - F.vpb.laag) * (1 - F.box2.laag);   // winst in BV → dividend (tot box2-grens)
+  return {
+    F, winst, vpbTarief, vpbReservering,
+    btwKwartaal: pot.btwPot, btwOntvangen: pot.btwOntvangen, voorbelasting: pot.voorbelasting,
+    loonPm, startMnd, loonHeelJaar, loonTekort, loonIngevuldOk: loonPm > 0 && startMnd > 0,
+    mndTotEind, bvRouteTarief,
+  };
+}
+
 function renderAdvies(root) {
   const items = adviesEngine();
   const cijfers = adviseurCijfers();
@@ -269,6 +304,56 @@ function renderAdvies(root) {
   const kTot = kanalen.reduce((s, k) => s + k.omzet, 0) || 1;
   const team = teamStats();
   const rv = recruiterVoortgang();
+  const bel = belastingAdvies(), F = bel.F, p1 = x => (x * 100).toFixed(1).replace('.', ',') + '%';
+  const maandNamen = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  const belHtml = `
+    <div class="panel mb"><h2>🧾 Belasting & DGA <span class="muted">— je twee belastingen uit elkaar</span> ${uitlegChip('a_belasting')}</h2>
+      <div class="grid cols-2" style="gap:12px;margin-bottom:12px">
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--accent)">
+          <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">🔁 Btw · omzetbelasting</div>
+          <div style="font-size:20px;font-weight:700;margin:2px 0">${eur(bel.btwKwartaal)}</div>
+          <div class="muted" style="font-size:12px">te betalen dit kwartaal (indicatie). <b>Doorgeefgeld</b> — je int 21% van klanten en stort door, minus voorbelasting. Staat <b>los</b> van je winst, je kosten én je DGA-loon.</div>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--amber)">
+          <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">📊 Vpb · winstbelasting ${F.jaar}</div>
+          <div style="font-size:20px;font-weight:700;margin:2px 0">${eur(bel.vpbReservering)}</div>
+          <div class="muted" style="font-size:12px">reserveren over winst YTD ${eur(bel.winst)} (19%). Bepaald over je <b>hele jaar</b> op 31 dec — <b>hier</b> drukken DGA-loon en kosten op, niet op de btw.</div>
+        </div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">
+        <b>👤 Gebruikelijkloon-check DGA</b>
+        <div class="row mt" style="gap:14px;align-items:center;flex-wrap:wrap">
+          <label class="muted" style="font-size:12px">Bruto DGA-loon/maand € <input id="bel_loon" type="number" min="0" step="100" value="${bel.loonPm || ''}" style="width:90px"></label>
+          <label class="muted" style="font-size:12px">gestart in <select id="bel_start" style="width:74px"><option value="0">—</option>${maandNamen.map((m, i) => `<option value="${i + 1}" ${bel.startMnd === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select> ${F.jaar}</label>
+        </div>
+        ${bel.loonIngevuldOk ? `
+          <p class="muted mt" style="font-size:12px">Op dit tempo boek je over ${F.jaar} <b>${eur(bel.loonHeelJaar)}</b> aan DGA-loon. Norm 2026 = <b>${eur(F.gebruikelijkLoon)}</b>.
+          ${bel.loonTekort > 0
+            ? `<span style="color:var(--amber)"> Tekort ~${eur(bel.loonTekort)}.</span> 👉 Je bent laat gestart met uitkeren — <b>bespreek met je boekhouder</b> of je over heel ${F.jaar} moet bijboeken. Het gebruikelijk loon geldt voor het hele jaar dat je DGA bent, niet vanaf je startmaand.`
+            : ` Je zit op of boven de norm — netjes.`}</p>`
+        : `<p class="muted mt" style="font-size:12px">Vul je bruto DGA-loon en startmaand in, dan checkt de app of je aan het gebruikelijk loon (€58.000) komt.</p>`}
+      </div>
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">
+        <b>⚖️ Meer loon uitkeren of in de BV laten (dividend)?</b>
+        <div class="table-wrap mt"><table>
+          <tr><th>Route</th><th class="num">Belastingdruk (indicatie ${F.jaar})</th></tr>
+          <tr><td>Loon uitkeren — box 1</td><td class="num">${p1(F.box1.schijf1)} tot ${eur(F.box1.grens1)} · ${p1(F.box1.top)} daarboven</td></tr>
+          <tr><td>In BV laten → later dividend (box 2)</td><td class="num">${p1(bel.bvRouteTarief)} tot ${eur(F.box2.grens)} · ${p1(1 - (1 - F.vpb.laag) * (1 - F.box2.hoog))} daarboven</td></tr>
+        </table></div>
+        <p class="muted mt" style="font-size:12px">Vuistregel: de <b>eerste ±${eur(F.box1.grens1)}</b> salaris is vaak iets voordeliger dan in de BV laten; dáárboven wint dividend meestal. Het is een <b>verschuiving</b>, geen gratis besparing. 👉 De exacte optimale mix (met heffingskortingen) rekent je boekhouder door.</p>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">
+        <b>📅 Nog ${bel.mndTotEind} maand${bel.mndTotEind === 1 ? '' : 'en'} om ${F.jaar} te sturen</b>
+        <p class="muted mt" style="font-size:12px">Vpb gaat over je jaarwinst op 31 dec — vóór die datum kun je ${F.jaar} nog beïnvloeden. Bespreek met je boekhouder:</p>
+        <ul class="muted" style="font-size:12px;margin:4px 0 0;padding-left:18px">
+          <li><b>Gebruikelijk loon</b> voor heel ${F.jaar} kloppend maken (zie hierboven)</li>
+          <li><b>Investeringsaftrek (KIA)</b> — noodzakelijke investeringen vóór 31 dec betalen zich deels terug</li>
+          <li><b>Timing van kosten</b> die je tóch moet maken naar dit jaar halen</li>
+          <li><b>Dividendruimte</b> — is uitkeren dit jaar of volgend jaar slimmer?</li>
+        </ul>
+      </div>
+      <p class="muted mt" style="font-size:11px">⚠️ Signalering & rekenhulp, géén belastingadvies. Tarieven 2026, jouw situatie kan afwijken — de knopen hak je met je boekhouder door.</p>
+    </div>`;
   const kanaalHtml = kanalen.length ? `<div class="table-wrap"><table>
     <tr><th>Kanaal</th><th class="num">Plaatsingen</th><th class="num">Omzet (na uitval)</th><th class="num">Aandeel</th></tr>
     ${kanalen.map(k => `<tr><td>${esc(k.bron)}</td><td class="num">${k.n}</td><td class="num">${eur(k.omzet)}</td><td class="num">${pct(k.omzet / kTot)}</td></tr>`).join('')}
@@ -308,6 +393,7 @@ function renderAdvies(root) {
       <div class="table-wrap"><table>
       ${cijfers.map(([l, v, s]) => `<tr><td>${esc(l)}</td><td class="num"><b>${esc(v)}</b></td><td class="muted">${esc(s)}</td></tr>`).join('')}
       </table></div></div>
+    ${belHtml}
     ${(() => {
       const ta = tariefAdvies();
       if (!ta.rows.length) return '';
@@ -333,6 +419,8 @@ function renderAdvies(root) {
     </div>`;
 
   root.addEventListener('change', async e => {
+    if (e.target.id === 'bel_loon') { await saveSetting('dga_loon_pm', Math.max(0, Number(e.target.value) || 0)); toast('DGA-loon opgeslagen ✓'); return rerender(); }
+    if (e.target.id === 'bel_start') { await saveSetting('dga_start_maand', Number(e.target.value) || 0); toast('Startmaand opgeslagen ✓'); return rerender(); }
     const inp = e.target.closest('.recdoel');
     if (!inp) return;
     const cur = { ...(S('recruiter_targets', {}) || {}) };

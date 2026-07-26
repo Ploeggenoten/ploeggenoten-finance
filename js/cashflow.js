@@ -112,6 +112,10 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> per klant het afgesproken W&S-tarief naast je gewogen gemiddelde, en hoeveel "rek" er op jaarbasis zit als een klant naar dat gemiddelde zou gaan.</p>
     <p><b>Hoe berekend:</b> netto omzet per klant dit jaar (na vervallen termijnen), geëxtrapoleerd naar 12 maanden; rek = die jaaromzet × het tariefverschil. Gemiddelde is gewogen naar omzet.</p>
     <p><b>Hoe sturen:</b> dit is onderhandelmunitie: bij contractverlenging of een nieuwe aanvraag weet je precies welke klant onder je norm zit en wat één procentpunt waard is. "Geen tarief ✎" = vastleggen bij Instellingen.</p>` },
+  a_belasting: { t: '🧾 Belasting & DGA', h: `
+    <p><b>Wat je ziet:</b> je twee belastingsoorten strikt uit elkaar (btw = doorgeefgeld, Vpb = winstbelasting), je Vpb-reservering, een gebruikelijkloon-check en de winst-vs-uitkeren-afweging.</p>
+    <p><b>Hoe berekend:</b> btw = 21% over gefactureerde omzet − voorbelasting (per kwartaal). Vpb = 19% over je jaarwinst (omzet − kosten), bepaald op 31 december — dus over het héle jaar. DGA-loon reken je zelf in (bruto/maand + startmaand); de norm is het gebruikelijk loon 2026 van €58.000.</p>
+    <p><b>Belangrijk:</b> dit is een signalerings- en rekenhulp, géén belastingadvies. Tarieven veranderen jaarlijks en jouw situatie kan afwijken. Gebruik dit om de juiste vragen aan je boekhouder te stellen — de knopen hak je met hem/haar door.</p>` },
   a_kanaal: { t: '📣 Wervingskanalen', h: `
     <p><b>Wat je ziet:</b> welk kanaal (Meta, Indeed, referral…) welke omzet aan plaatsingen opleverde.</p>
     <p><b>Hoe berekend:</b> per gekoppelde bord-kandidaat het bron-veld × de netto fee van de plaatsing.</p>
