@@ -6,6 +6,7 @@ const VIEWS = {
   plaatsingen: renderPlaatsingen,
   facturatie: renderFacturatie,
   flex: renderFlex,
+  winst: renderWinstDoelen,
   cashflow: renderCashflow,
   kosten: renderKosten,
   instellingen: renderInstellingen,

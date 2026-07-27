@@ -636,35 +636,8 @@ function wireWinstDoor() {
   if (rs) rs.onclick = async () => { await saveSetting('kosten_pm_override', 0); rerender(); };
 }
 
-// ── hoofdview ──────────────────────────────────────────────────
-function renderCashflow(root) {
-  const tgt0 = targetInfo().aantalTarget;
-  const behoud0 = 1 - (kpis().stopPct || 0);
-  if (!scenarioState) {
-    const basis = {
-      bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0, tegenvallerMarge: 2,
-      omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
-    };
-    const def = cfSavedScenarios().find(s => s.naam === S('scenario_default'));
-    scenarioState = def ? { ...basis, ...def.sc } : basis;
-  }
-  const sc = scenarioState;
-  const saved = cfSavedScenarios();
-  const defNaam = S('scenario_default');
-  if (sc.plaatsingenPm == null) sc.plaatsingenPm = tgt0;
-  if (sc.blijfkans == null) sc.blijfkans = behoud0;
-  if (sc.tegenvallerMarge == null) sc.tegenvallerMarge = 2;
-  const pf = pipelineForecast();
-  const proj = projectie(12, sc);
-  const lening = D.loans[0];
-  const afgelost = D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0);
-  const maandOpts = proj.rows.map((r, i) => `<option value="${i}" ${i === sc.extraHireVanaf ? 'selected' : ''}>${esc(r.label)}</option>`).join('');
-
-  // pijplijn per plaatsmaand → aantallen (verwacht = som van kansen)
-  const plMaanden = Object.keys(pf.perMaandPlaatsMaand).sort();
-  const plChips = plMaanden.map(mk => `<span class="tag gray">${fmtMaand(mk)}: <b>${pf.perMaandPlaatsMaand[mk].toFixed(1)}</b></span>`).join(' ');
-  const behoefte = sc.plaatsingenPm;   // per maand nodig voor target
-
+// ── Winst & doelen (planning: doel + winst-doorrekening + investeringsbeslisser) ──
+function renderWinstDoelen(root) {
   const gps = jaardoelGps();
   const od = omzetDoel();
   const jaarNu = todayISO().slice(0, 4);
@@ -695,8 +668,8 @@ function renderCashflow(root) {
   })();
 
   root.innerHTML = `
-    <div class="spread mb"><h1>Cashflow & toekomst</h1>
-      <span class="muted" style="font-size:12px">🔄 Saldo & cijfers automatisch uit Yuki${S('yuki_synced_at') ? ` · ${fmtD(S('yuki_synced_at').slice(0, 10))}` : ''}</span></div>
+    <div class="spread mb"><h1>Winst & doelen</h1>
+      <span class="muted" style="font-size:12px">Waar ga je heen — en wat houd je eraan over</span></div>
 
     <div class="panel mb"><div class="spread mb"><h2>🎯 Jaardoel-GPS ${uitlegChip('gps')}</h2>
       <span class="row" style="gap:12px;align-items:center;flex-wrap:wrap">
@@ -718,12 +691,44 @@ function renderCashflow(root) {
     <div class="panel mb"><h2>💶 Winst-doorrekening <span class="muted">— van omzet tot wat je overhoudt</span> ${uitlegChip('winstdoor')}</h2>
       <div id="winstDoorDyn">${winstDoorHtml()}</div></div>
 
-    <div class="grid cols-2 mb">
-      <div class="panel"><h2>🧮 Investeringsbeslisser <span class="muted">— kan ik dit veroorloven?</span> ${uitlegChip('invest')}</h2>
-        <div id="investDyn">${investHtml()}</div></div>
-      <div class="panel"><h2>📅 13-weken cashflow <span class="muted">— grip op de timing</span> ${uitlegChip('week13')}</h2>
-        ${weekCashHtml()}</div>
-    </div>
+    <div class="panel mb"><h2>🧮 Investeringsbeslisser <span class="muted">— kan ik dit veroorloven?</span> ${uitlegChip('invest')}</h2>
+      <div id="investDyn">${investHtml()}</div></div>`;
+
+  $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Doelwinst opgeslagen ✓'); rerender(); };
+  $('#gps_omzet').onchange = async e => { await saveSetting('doel_omzet_jaar', Math.max(0, +e.target.value || 0)); toast('Doelomzet opgeslagen ✓'); rerender(); };
+  wireWinstDoor();
+  wireInvest();
+}
+
+// ── hoofdview ──────────────────────────────────────────────────
+function renderCashflow(root) {
+  const tgt0 = targetInfo().aantalTarget;
+  const behoud0 = 1 - (kpis().stopPct || 0);
+  if (!scenarioState) {
+    const basis = {
+      bron: 'pijplijn', plaatsingenPm: tgt0, blijfkans: behoud0, tegenvallerMarge: 2,
+      omzetPm: Number(S('scenario_omzet_pm', 25000)), omzetDipPct: 0, extraHirePm: 0, extraHireVanaf: 2, aflossenAan: true, flexFactor: 1,
+    };
+    const def = cfSavedScenarios().find(s => s.naam === S('scenario_default'));
+    scenarioState = def ? { ...basis, ...def.sc } : basis;
+  }
+  const sc = scenarioState;
+  const saved = cfSavedScenarios();
+  const defNaam = S('scenario_default');
+  if (sc.plaatsingenPm == null) sc.plaatsingenPm = tgt0;
+  if (sc.blijfkans == null) sc.blijfkans = behoud0;
+  if (sc.tegenvallerMarge == null) sc.tegenvallerMarge = 2;
+  const proj = projectie(12, sc);
+  const lening = D.loans[0];
+  const afgelost = D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0);
+  const maandOpts = proj.rows.map((r, i) => `<option value="${i}" ${i === sc.extraHireVanaf ? 'selected' : ''}>${esc(r.label)}</option>`).join('');
+
+  root.innerHTML = `
+    <div class="spread mb"><h1>Cashflow & toekomst</h1>
+      <span class="muted" style="font-size:12px">🔄 Saldo & cijfers automatisch uit Yuki${S('yuki_synced_at') ? ` · ${fmtD(S('yuki_synced_at').slice(0, 10))}` : ''}</span></div>
+
+    <div class="panel mb"><h2>📅 13-weken cashflow <span class="muted">— grip op de timing</span> ${uitlegChip('week13')}</h2>
+      ${weekCashHtml()}</div>
 
     <div id="cfDyn">${cfDynHtml(sc)}</div>
 
@@ -771,22 +776,6 @@ function renderCashflow(root) {
       </div>
     </div>
 
-    <div class="panel mb"><div class="spread mb"><h2>🔮 Wat zit er in de pijplijn <span class="muted">— live van het bord</span> ${uitlegChip('pijplijn')}</h2>
-      <span class="muted">gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> plaatsingen · bruto <b>${eur(pf.totaal)}</b> → netto <b style="color:var(--accent)">${eur(pf.totaalNetto)}</b> excl. btw</span></div>
-      ${pf.rows.length ? `
-      <div class="mb">Verwachte plaatsingen per maand (gewogen koppen): ${plChips || '—'}
-        <p class="muted mt">Om <b>${behoefte}</b> plaatsing${behoefte === 1 ? '' : 'en'} per maand te halen, moet de pijplijn dat tempo blijven voeden. Nu staat er gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> op de rol voor de komende ~2 maanden — ${pf.verwachtAantal >= behoefte ? '<b style="color:var(--green)">genoeg om het tempo vast te houden</b>' : `<b style="color:var(--amber)">${(behoefte - pf.verwachtAantal).toFixed(1)} te weinig</b> — er moet bovenaan de funnel bij`}.</p></div>
-      <div class="table-wrap"><table>
-      <tr><th>Kandidaat</th><th>Klant</th><th>Fase</th><th class="num">Kans</th><th class="num">Fee</th><th class="num">Bruto gewogen</th><th class="num">Netto (na uitval)</th><th>Cash verwacht</th></tr>
-      ${pf.rows.map(r => `<tr><td>${esc(r.c.naam)}</td><td>${esc(r.c.klant || '')}</td><td>${tag(r.c.fase, r.kans >= .5 ? 'green' : r.kans >= .25 ? 'amber' : 'gray')}</td>
-        <td class="num">${Math.round(r.kans * 100)}%</td><td class="num" title="${r.feeEcht ? 'echte fee: maandloon × jaarfactor × klanttarief' : 'gemiddelde fee (geen maandloon op het bord)'}">${eur(r.fee)}${r.feeEcht ? '' : ' <span class="muted">~</span>'}</td><td class="num muted">${eur(r.gewogen)}</td><td class="num"><b>${eur(r.netto)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
-      </table></div>
-      <p class="muted mt">Kans per fase: voorgesteld 5% · O&O 10% · 1e gesprek 20% · 2e gesprek 40% · meeloopdag 50% · in de wacht 50% · offer 65% · ondertekenen 75% <span class="muted">(Voorselectie telt niet mee)</span>. <b>Bruto</b> = kans × fee (echte fee waar het bord een maandloon heeft; <b>~</b> = gemiddelde). <b>Netto</b> = na verwachte uitval — die <b>leert de app uit je eigen stops</b> (nu blijft <b>${Math.round(pf.behoud * 100)}%</b>). De projectie rekent met netto. Een plaatsing telt pas vanaf "Contract getekend".</p>`
-      : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
-
-    <div class="panel mb" id="ketPanel"><h2>🔗 Conversie-keten <span class="muted">— van voorstel tot blijvende plaatsing</span> ${uitlegChip('keten')}</h2>
-      <div id="ketDyn">${ketenHtml()}</div></div>
-
     <div class="panel table-wrap" id="cfTabel">${cfTabelHtml(sc)}</div>
 
     <div class="panel table-wrap mt">${cfTerugblikHtml()}</div>`;
@@ -805,12 +794,7 @@ function renderCashflow(root) {
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
     $('#scv_hire').textContent = eur(sc.extraHirePm);
   };
-  $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Doelwinst opgeslagen ✓'); rerender(); };
-  $('#gps_omzet').onchange = async e => { await saveSetting('doel_omzet_jaar', Math.max(0, +e.target.value || 0)); toast('Doelomzet opgeslagen ✓'); rerender(); };
   wireUitkeer();
-  wireKeten();
-  wireInvest();
-  wireWinstDoor();
   $('#sc_load').onchange = e => cfLoadScenario(e.target.value);
   $('#sc_save').onclick = openSaveScenario;
   $('#sc_star').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een opgeslagen scenario', true); cfSetDefaultScenario(n); };

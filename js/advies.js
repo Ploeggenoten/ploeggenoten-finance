@@ -442,6 +442,24 @@ function renderAdvies(root) {
     return `<div class="panel mb"><h2>${titel} <span class="muted">(${xs.length})</span></h2>
       ${xs.map(kaart).join('') || '<div class="empty">Niets gevonden — dat is hier goed nieuws.</div>'}</div>`;
   };
+  const pf = pipelineForecast();
+  const behoefte = targetInfo().aantalTarget || 8;   // maand-target van het bord
+  const plChips = Object.keys(pf.perMaandPlaatsMaand).sort().map(mk => `<span class="tag gray">${fmtMaand(mk)}: <b>${pf.perMaandPlaatsMaand[mk].toFixed(1)}</b></span>`).join(' ');
+  const pijplijnHtml = `
+    <div class="panel mb"><div class="spread mb"><h2>🔮 Wat zit er in de pijplijn <span class="muted">— live van het bord</span> ${uitlegChip('pijplijn')}</h2>
+      <span class="muted">gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> plaatsingen · bruto <b>${eur(pf.totaal)}</b> → netto <b style="color:var(--accent)">${eur(pf.totaalNetto)}</b> excl. btw</span></div>
+      ${pf.rows.length ? `
+      <div class="mb">Verwachte plaatsingen per maand (gewogen koppen): ${plChips || '—'}
+        <p class="muted mt">Om <b>${behoefte}</b> plaatsing${behoefte === 1 ? '' : 'en'} per maand te halen, moet de pijplijn dat tempo blijven voeden. Nu staat er gewogen <b>${pf.verwachtAantal.toFixed(1)}</b> op de rol voor de komende ~2 maanden — ${pf.verwachtAantal >= behoefte ? '<b style="color:var(--green)">genoeg om het tempo vast te houden</b>' : `<b style="color:var(--amber)">${(behoefte - pf.verwachtAantal).toFixed(1)} te weinig</b> — er moet bovenaan de funnel bij`}.</p></div>
+      <div class="table-wrap"><table>
+      <tr><th>Kandidaat</th><th>Klant</th><th>Fase</th><th class="num">Kans</th><th class="num">Fee</th><th class="num">Bruto gewogen</th><th class="num">Netto (na uitval)</th><th>Cash verwacht</th></tr>
+      ${pf.rows.map(r => `<tr><td>${esc(r.c.naam)}</td><td>${esc(r.c.klant || '')}</td><td>${tag(r.c.fase, r.kans >= .5 ? 'green' : r.kans >= .25 ? 'amber' : 'gray')}</td>
+        <td class="num">${Math.round(r.kans * 100)}%</td><td class="num" title="${r.feeEcht ? 'echte fee: maandloon × jaarfactor × klanttarief' : 'gemiddelde fee (geen maandloon op het bord)'}">${eur(r.fee)}${r.feeEcht ? '' : ' <span class="muted">~</span>'}</td><td class="num muted">${eur(r.gewogen)}</td><td class="num"><b>${eur(r.netto)}</b></td><td>${fmtMaand(r.cashMaand)}</td></tr>`).join('')}
+      </table></div>
+      <p class="muted mt">Kans per fase: voorgesteld 5% · O&O 10% · 1e gesprek 20% · 2e gesprek 40% · meeloopdag 50% · in de wacht 50% · offer 65% · ondertekenen 75% <span class="muted">(Voorselectie telt niet mee)</span>. <b>Bruto</b> = kans × fee. <b>Netto</b> = na verwachte uitval (nu blijft <b>${Math.round(pf.behoud * 100)}%</b>). Een plaatsing telt pas vanaf "Contract getekend".</p>`
+      : '<div class="empty">Geen actieve kandidaten in de W&S-funnel op het bord.</div>'}</div>
+    <div class="panel mb" id="ketPanel"><h2>🔗 Conversie-keten <span class="muted">— van voorstel tot blijvende plaatsing</span> ${uitlegChip('keten')}</h2>
+      <div id="ketDyn">${ketenHtml()}</div></div>`;
   root.innerHTML = `
     <h1>Advies · je financieel adviseur</h1>
     <div class="muted mb">Live berekend uit je eigen cijfers, met branchenormen voor werving & selectie + flex. Elke kaart: wat er speelt, waarom het telt, en wat een adviseur zou doen.</div>
@@ -469,12 +487,14 @@ function renderAdvies(root) {
     ${sectie('gevaar', '🔴 Gevaren')}
     ${sectie('kans', '🟡 Kansen')}
     ${sectie('sterkte', '🟢 Sterktes')}
+    ${pijplijnHtml}
     <div class="grid cols-2">
       <div class="panel"><h2>📣 Wervingskanalen ${uitlegChip('a_kanaal')}</h2>${kanaalHtml}</div>
       <div class="panel"><h2>👥 Team & snelheid ${uitlegChip('a_team')}</h2>${teamHtml}</div>
     </div>`;
 
   wireSdCalc();
+  wireKeten();
   root.addEventListener('change', async e => {
     if (e.target.id === 'bel_loon') { await saveSetting('dga_loon_pm', Math.max(0, Number(e.target.value) || 0)); toast('DGA-loon opgeslagen ✓'); return rerender(); }
     if (e.target.id === 'bel_start') { await saveSetting('dga_start_maand', Number(e.target.value) || 0); toast('Startmaand opgeslagen ✓'); return rerender(); }
