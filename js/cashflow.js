@@ -650,22 +650,76 @@ function renderWinstDoelen(root) {
       <div class="pot"><span>W&S nodig</span><b>${eur(b.wsNodig)}</b></div>
       <div class="pot"><span>= Plaatsingen</span><b style="color:var(--accent)">${b.plaats != null ? b.plaats.toFixed(1) : '—'} <span class="muted">(${b.perMnd != null ? b.perMnd.toFixed(1) : '—'}/mnd)</span></b></div>
     </div>` : '';
-  const gpsHtml = gps.doel == null ? `<div class="empty">Vul rechtsboven je winstdoel voor ${jaarNu} in — dan rekent de GPS uit wat er per maand moet gebeuren.</div>` : (() => {
-    const pctDoel = Math.max(0, Math.min(1, gps.winstYtd / gps.doel));
-    const opKoers = gps.restJaar.perMnd != null && gps.tempo >= gps.restJaar.perMnd;
-    return `
-    <div class="grid cols-4 mb">
-      <div class="kpi ${gps.winstYtd >= gps.doel ? 'good' : ''}"><div class="lbl">Winst YTD</div><div class="val">${eur(gps.winstYtd)}</div><div class="sub">van ${eur(gps.doel)} doel (${Math.round(pctDoel * 100)}%)</div></div>
-      <div class="kpi ${gps.teGaan <= 0 ? 'good' : ''}"><div class="lbl">Nog te gaan t/m 31 dec</div><div class="val">${gps.teGaan <= 0 ? '🎉 gehaald' : eur(gps.teGaan)}</div><div class="sub">${gps.mndRest} maanden</div></div>
-      <div class="kpi"><div class="lbl">Nodig tempo</div><div class="val">${gps.restJaar.perMnd != null ? gps.restJaar.perMnd.toFixed(1) : '—'}/mnd</div><div class="sub">plaatsingen (na uitval ${Math.round(gps.blijf * 100)}%)</div></div>
-      <div class="kpi ${opKoers ? 'good' : 'warn'}"><div class="lbl">Huidig tempo ${jaarNu}</div><div class="val">${gps.tempo.toFixed(1)}/mnd</div><div class="sub">${opKoers ? '✓ op koers' : `${(gps.restJaar.perMnd - gps.tempo).toFixed(1)}/mnd te weinig`}</div></div>
-    </div>
-    <div class="cbar mb" style="height:10px"><i style="width:${Math.round(pctDoel * 100)}%;background:${gps.winstYtd >= gps.doel ? 'var(--green)' : 'var(--accent)'};display:block;height:100%"></i></div>
-    <div class="grid cols-2">
-      ${gpsBlok(`📅 T/m 31 december (${gps.mndRest} mnd)`, gps.restJaar)}
-      ${gpsBlok('🔄 Komende 12 maanden (zelfde doel)', gps.rolling)}
+  // ── doel-cockpit: waar sta je + wat moet er concreet gebeuren ──
+  const mndRest = gps.mndRest;
+  const netPerPl = (od.gemFee || 0) * gps.blijf;                       // netto omzet per plaatsing (na uitval)
+  // omzet-spoor: plaatsingen nodig voor het omzetdoel (rest van het jaar)
+  const omzetTeGaan = Math.max(0, od.doel - od.omzetYtd);
+  const flexRest = gps.flexPm * mndRest;
+  const plOmzet = netPerPl > 0 ? Math.max(0, omzetTeGaan - flexRest) / netPerPl : null;
+  // winst-spoor: plaatsingen nodig voor het winstdoel (uit de GPS)
+  const plWinst = gps.restJaar ? gps.restJaar.plaats : null;
+  const plNodig = Math.max(plOmzet ?? 0, plWinst ?? 0);
+  const leidend = (plOmzet ?? 0) >= (plWinst ?? 0) ? 'omzetdoel' : 'winstdoel';
+  const plPerMnd = mndRest > 0 ? plNodig / mndRest : null;
+  const tekortTempo = plPerMnd != null ? plPerMnd - gps.tempo : null;
+  // vertaling naar activiteiten via je eigen conversie-keten
+  const kt = conversieKeten();
+  const offPerPl = kt.offerPerPlaatsing, voorPerOff = kt.voorPerOffer;
+  const offersPerMnd = offPerPl != null && plPerMnd != null ? plPerMnd * offPerPl : null;
+  const voorstPerMnd = offersPerMnd != null && voorPerOff != null ? offersPerMnd * voorPerOff : null;
+  const omzetKoers = od.omzetRunRate >= od.doel;
+  const winstKoers = gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null && gps.tempo >= gps.restJaar.perMnd;
+  const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
+
+  const doelKaart = (titel, ytd, doelBedrag, koersOk, koersTxt) => {
+    const pctD = doelBedrag > 0 ? Math.max(0, Math.min(1, ytd / doelBedrag)) : 0;
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px 16px">
+      <div class="spread" style="margin-bottom:4px"><b style="font-size:13px;text-transform:uppercase;letter-spacing:.5px">${titel}</b>
+        ${ytd >= doelBedrag && doelBedrag > 0 ? tag('🎉 gehaald', 'green') : koersOk ? tag('✓ op koers', 'green') : tag('⚠ achter op koers', 'amber')}</div>
+      <div style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">${eur(ytd)} <span class="muted" style="font-size:14px;font-weight:400">/ ${eur(doelBedrag)} (${Math.round(pctD * 100)}%)</span></div>
+      <div class="cbar" style="height:10px;margin:8px 0 6px"><i style="width:${Math.round(pctD * 100)}%;background:${ytd >= doelBedrag && doelBedrag > 0 ? 'var(--green)' : 'var(--accent)'};display:block;height:100%"></i></div>
+      <div class="muted" style="font-size:12px">${koersTxt}</div>
     </div>`;
-  })();
+  };
+
+  const missieRij = (ico, wat, hoeveel, sub) => `<div style="display:flex;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)">
+    <span style="font-size:18px">${ico}</span>
+    <div style="flex:1"><b>${wat}</b><br><span class="muted" style="font-size:12px">${sub}</span></div>
+    <b style="font-size:17px;white-space:nowrap;font-variant-numeric:tabular-nums">${hoeveel}</b></div>`;
+
+  const gpsHtml = `
+    <div class="grid cols-2 mb" style="gap:12px">
+      ${doelKaart('💶 Omzet ' + jaarNu, od.omzetYtd, od.doel, omzetKoers,
+        omzetTeGaan <= 0 ? 'Doel binnen — alles erboven is bonus.'
+          : `nog <b>${eur(omzetTeGaan)}</b> in ${mndRest} mnd · op huidige koers eindig je op ~<b>${eur(od.omzetRunRate)}</b>${omzetKoers ? '' : ` (<b>${eur(Math.max(0, od.doel - od.omzetRunRate))}</b> tekort als je niets verandert)`}`)}
+      ${gps.doel == null
+        ? `<div style="border:1px dashed var(--line);border-radius:12px;padding:14px 16px" class="empty">Vul rechtsboven je doelwinst in voor de winst-kant.</div>`
+        : doelKaart('📊 Winst ' + jaarNu + ' (vóór Vpb)', gps.winstYtd, gps.doel, winstKoers,
+          gps.teGaan <= 0 ? 'Doel binnen — alles erboven is bonus.'
+            : `nog <b>${eur(gps.teGaan)}</b> in ${mndRest} mnd · marge nu ${od.omzetYtd ? Math.round(od.winstYtd / od.omzetYtd * 100) : 0}%`)}
+    </div>
+    <div style="border:2px solid var(--accent);border-radius:12px;padding:14px 16px;background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
+      <div class="spread" style="margin-bottom:4px"><b>📋 Zo haal je het — nog ${mndRest} maanden t/m 31 dec</b>
+        <span class="muted" style="font-size:11px">strengste van beide doelen telt (nu: ${leidend})</span></div>
+      ${missieRij('⚡', `Plaatsingen: <b style="color:var(--accent)">${f1(plPerMnd)} per maand</b>`,
+        `${Math.ceil(plNodig)} totaal`,
+        tekortTempo != null && tekortTempo > 0.05
+          ? `je zit nu op ${f1(gps.tempo)}/mnd → er moet <b style="color:var(--amber)">+${f1(tekortTempo)}/mnd bij</b>`
+          : `je zit nu op ${f1(gps.tempo)}/mnd → <b style="color:var(--green)">dit tempo vasthouden is genoeg</b>`)}
+      ${missieRij('📄', `Offers: ~${f1(offersPerMnd)} per maand`, offersPerMnd != null ? Math.ceil(offersPerMnd * mndRest) + ' totaal' : '—',
+        `1 plaatsing kost jou gemiddeld ${f1(offPerPl)} offers (eigen cijfers)`)}
+      ${missieRij('📣', `Voorstellen: ~${f1(voorstPerMnd)} per maand`, voorstPerMnd != null ? '≈ ' + f1(voorstPerMnd / 4.33) + ' per week' : '—',
+        `1 offer kost jou gemiddeld ${f1(voorPerOff)} voorstellen — dit is wat het team wekelijks bovenin moet stoppen`)}
+      <p class="muted" style="font-size:11px;margin:8px 0 0">Plaatsingen netto gerekend (na ${Math.round((1 - gps.blijf) * 100)}% uitval, gem. fee ${eur(od.gemFee)}); flex-marge (~${eur(gps.flexPm)}/mnd) is al meegeteld. Ratio's komen live uit je eigen conversie-keten.</p>
+    </div>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px">🔍 Detail-opbouw (t/m 31 dec & komende 12 mnd)</summary>
+      <div class="grid cols-2 mt">
+        ${gpsBlok(`📅 T/m 31 december (${gps.mndRest} mnd)`, gps.restJaar)}
+        ${gpsBlok('🔄 Komende 12 maanden (zelfde doel)', gps.rolling)}
+      </div>
+    </details>`;
 
   root.innerHTML = `
     <div class="spread mb"><h1>Winst & doelen</h1>
@@ -678,14 +732,6 @@ function renderWinstDoelen(root) {
         <span class="row" style="gap:6px;align-items:center"><label style="margin:0">Doelwinst (€)</label>
         <input id="gps_doel" type="number" step="5000" min="0" value="${gps.doel ?? ''}" placeholder="bijv. 190000" style="width:110px"></span>
       </span></div>
-      <div class="grid cols-4 mb">
-        <div class="kpi"><div class="lbl">Omzet YTD ${jaarNu}</div><div class="val">${eur(od.omzetYtd)}</div><div class="sub">van ${eur(od.doel)} · ${Math.round(od.pctDoel * 100)}% · koers ~${eur(od.omzetRunRate)}</div></div>
-        <div class="kpi"><div class="lbl">Winst YTD <span class="muted">(vóór Vpb)</span></div><div class="val">${eur(od.winstYtd)}</div><div class="sub">marge ${od.omzetYtd ? Math.round(od.winstYtd / od.omzetYtd * 100) : 0}%</div></div>
-        <div class="kpi accent"><div class="lbl">Nodig voor ${eur(od.doel)}</div><div class="val">${od.plaatsingenNodig != null ? Math.round(od.plaatsingenNodig) : '—'} <span class="muted" style="font-size:13px">plaatsingen</span></div><div class="sub">~${od.perMnd != null ? od.perMnd.toFixed(1) : '—'}/mnd · ná ~${eur(od.flexJaar)} flex</div></div>
-        <div class="kpi"><div class="lbl">Plaatsingen YTD</div><div class="val">${od.plaatsingenYtd}</div><div class="sub">dit jaar tot nu</div></div>
-      </div>
-      <div class="cbar mb" style="height:10px"><i style="width:${Math.round(od.pctDoel * 100)}%;background:var(--accent);display:block;height:100%"></i></div>
-      <p class="muted mb" style="font-size:12px">Voor <b>${eur(od.doel)}</b> omzet heb je ~<b>${od.plaatsingenNodig != null ? Math.round(od.plaatsingenNodig) : '—'} plaatsingen</b> per jaar nodig (${od.perMnd != null ? od.perMnd.toFixed(1) : '—'}/mnd), bij je gem. fee van ${eur(od.gemFee)} en ná de flex-bijdrage. Houd wat marge aan: ~${Math.round((1 - od.blijf) * 100)}% van je plaatsingen stopt en verliest een deel van de fee.</p>
       ${gpsHtml}</div>
 
     <div class="panel mb"><h2>💶 Winst-doorrekening <span class="muted">— van omzet tot wat je overhoudt</span> ${uitlegChip('winstdoor')}</h2>
