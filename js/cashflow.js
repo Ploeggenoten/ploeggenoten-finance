@@ -584,6 +584,16 @@ function winstDoorHtml() {
       <div class="kpi"><div class="lbl">Winstmarge <span class="muted">(na alle kosten, vóór Vpb)</span></div><div class="val">${(w.winstmarge * 100).toFixed(1)}%</div><div class="sub">${eur(w.winstVoorVpb)} winst ÷ ${eur(w.doel)} omzet</div></div>
       <div class="kpi accent"><div class="lbl">Netto winstmarge <span class="muted">(na Vpb)</span></div><div class="val">${(w.nettoMarge * 100).toFixed(1)}%</div><div class="sub">${eur(w.nettoWinst)} netto ÷ ${eur(w.doel)} omzet</div></div>
     </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-top:12px">
+      <b>🎯 Wat levert 1 extra plaatsing op?</b>
+      <div class="table-wrap mt"><table style="font-size:14px">
+        <tr><td>Gemiddelde fee</td><td class="num">${eur(w.gemFee)}</td></tr>
+        <tr><td>− Marketing/sourcing per plaatsing</td><td class="num" style="color:var(--red)">−${eur(w.mktPerPl)}</td></tr>
+        <tr><td>− Uitval-risico <span class="muted">(${Math.round(w.stopPct * 100)}% stopt)</span></td><td class="num" style="color:var(--red)">−${eur(w.uitvalPerPl)}</td></tr>
+        <tr style="border-top:1px solid var(--line);font-weight:700"><td>= Marginale winst per extra plaatsing</td><td class="num">${eur(w.marginaleWinstPl)} <span style="color:var(--green)">(${Math.round(w.marginaleMargePl * 100)}%)</span></td></tr>
+      </table></div>
+      <p class="muted mt" style="font-size:12px"><b>Nee — 1 plaatsing kost je géén 50%.</b> Die ~${(w.winstmarge * 100).toFixed(0)}% is je <b>gemiddelde</b> marge: daar zitten al je vaste kosten in (recruiters, kantoor, auto's, management fee). Eén <b>extra</b> plaatsing kost alleen de sourcing + uitval-risico — je vaste kosten zijn al betaald. Daarom is de marginale marge ~<b>${Math.round(w.marginaleMargePl * 100)}%</b>. Hoe méér je plaatst, hoe hoger je gemiddelde marge (vaste kosten verdeeld over meer plaatsingen). Dát is waarom je €400k-doel zo waardevol is.</p>
+    </div>
     <div class="grid cols-2 mt" style="gap:12px">
       <div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;border-left:4px solid var(--accent)">
         <div class="muted" style="font-size:11px;text-transform:uppercase">💰 Als dividend uitkeren (box 2)</div>

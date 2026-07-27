@@ -571,9 +571,17 @@ function winstDoorrekening() {
 
   const winstmarge = doel > 0 ? winstVoorVpb / doel : 0;      // na alle kosten, vóór Vpb
   const nettoMarge = doel > 0 ? nettoWinst / doel : 0;        // na Vpb
+  // per-plaatsing unit economics: marginale bijdrage van 1 EXTRA plaatsing (vaste kosten zijn al betaald)
+  const mktPm = (D.budget || []).filter(b => /marketing/i.test(b.categorie || '')).reduce((s, b) => s + Number(b.bedrag_pm || 0), 0);
+  const mktPerPl = plaatsingenVoorDoel > 0 ? mktPm * 12 / plaatsingenVoorDoel : 0;   // sourcing/advertentie per plaatsing
+  const uitvalPerPl = k.plaatsingenYtd > 0 ? k.vervallen / k.plaatsingenYtd : 0;     // gem. verlies door stops
+  const directPerPl = mktPerPl + uitvalPerPl;
+  const marginaleWinstPl = gemFee - directPerPl;
+  const marginaleMargePl = gemFee > 0 ? marginaleWinstPl / gemFee : 0;
   return { kostenMaand, basisKosten, extraLoon, kostenBron, kostenJaar, override, actuals, laatsteMaand: laatste ? laatste.maand : null,
     doel, gemFee, blijf, stopPct: k.stopPct, flexJaar, plaatsingenVoorDoel, plaatsingenYtd: k.plaatsingenYtd,
     herinvest, vpbZonderHerinvest, vpbBesparing, winstmarge, nettoMarge,
+    mktPerPl, uitvalPerPl, directPerPl, marginaleWinstPl, marginaleMargePl,
     winstVoorVpb, vpb, nettoWinst, leningOpen, leningAflossing, vrij, box2, dividendNetto,
     winstYtd: potjes().winstYtd, saldoNu: D.saldi[0] ? Number(D.saldi[0].saldo) : 0 };
 }
