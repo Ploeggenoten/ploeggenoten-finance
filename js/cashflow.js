@@ -609,10 +609,7 @@ function renderCashflow(root) {
 
   root.innerHTML = `
     <div class="spread mb"><h1>Cashflow & toekomst</h1>
-      <div class="row">
-        <button class="btn" id="cfCsv">📄 Bank-CSV importeren</button>
-        <button class="btn primary" id="cfSaldo">🏦 Saldo bijwerken</button>
-      </div></div>
+      <span class="muted" style="font-size:12px">🔄 Saldo & cijfers automatisch uit Yuki${S('yuki_synced_at') ? ` · ${fmtD(S('yuki_synced_at').slice(0, 10))}` : ''}</span></div>
 
     <div class="panel mb"><div class="spread mb"><h2>🎯 Jaardoel-GPS ${uitlegChip('gps')}</h2>
       <span class="row" style="gap:12px;align-items:center;flex-wrap:wrap">
@@ -737,8 +734,6 @@ function renderCashflow(root) {
   $('#sc_hire').oninput = e => { sc.extraHirePm = +e.target.value; upd(); };
   $('#sc_hireVanaf').onchange = e => { sc.extraHireVanaf = +e.target.value; upd(); };
   $('#sc_afl').onchange = e => { sc.aflossenAan = e.target.checked; upd(); };
-  $('#cfSaldo').onclick = openSaldoModal;
-  $('#cfCsv').onclick = openCsvImport;
   root.addEventListener('click', async e => {
     const b = e.target.closest('[data-lp]');
     if (!b) return;
