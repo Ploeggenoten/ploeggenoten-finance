@@ -560,20 +560,24 @@ function winstDoorHtml() {
     <td style="padding:6px 4px">${label}</td>
     <td class="num" style="padding:6px 4px;${o.neg ? 'color:var(--red)' : ''}${o.big ? ';font-size:18px' : ''}">${o.neg ? '−' : ''}${eur(Math.abs(bedrag))}</td></tr>`;
   return `
-    <div class="grid cols-2 mb" style="gap:12px">
+    <div class="grid cols-3 mb" style="gap:12px">
       <label class="muted" style="font-size:12px;display:block">Kosten per maand (basis) €<br>
         <input id="wd_kosten" type="number" min="0" step="500" value="${Math.round(w.kostenMaand)}" style="width:100%"></label>
-      <div class="muted" style="font-size:12px;align-self:end">bron: <b>${esc(w.kostenBron)}</b> ${w.override ? `<button class="btn small ghost" id="wd_reset">↺ terug naar Yuki</button>` : ''}</div>
+      <label class="muted" style="font-size:12px;display:block">Herinvesteren dit jaar €<br>
+        <input id="wd_herinvest" type="number" min="0" step="5000" value="${Math.round(w.herinvest)}" style="width:100%"></label>
+      <div class="muted" style="font-size:12px;align-self:end">kosten-bron: <b>${esc(w.kostenBron)}</b> ${w.override ? `<button class="btn small ghost" id="wd_reset">↺ Yuki</button>` : ''}</div>
     </div>
     <div class="table-wrap"><table style="font-size:14px">
       ${line('Omzet (doel)', w.doel)}
       ${line(`− Kosten <span class="muted">(${eur(w.kostenMaand)}/mnd × 12)</span>`, w.kostenJaar, { neg: true })}
+      ${w.herinvest > 0 ? line('− Herinvesteren <span class="muted">(extra aftrekbare kosten)</span>', w.herinvest, { neg: true }) : ''}
       ${line('= Winst vóór Vpb', w.winstVoorVpb, { sum: true })}
-      ${line('− Vpb <span class="muted">(19% tot €200k, 25,8% erboven)</span>', w.vpb, { neg: true })}
+      ${line(`− Vpb <span class="muted">(19% tot €200k, 25,8% erboven)</span>${w.vpbBesparing > 0 ? ` <span style="color:var(--green)">−${eur(w.vpbBesparing)} bespaard</span>` : ''}`, w.vpb, { neg: true })}
       ${line('= Netto winst (na Vpb)', w.nettoWinst, { sum: true })}
       ${line('− Aflossing lening moeder', w.leningAflossing, { neg: true })}
       ${line('<b>= Vrij: uitkeren of investeren</b>', w.vrij, { sum: true, big: true })}
     </table></div>
+    ${w.herinvest > 0 ? `<p class="muted mt" style="font-size:12px;background:var(--limebg);border-radius:8px;padding:8px 10px">🏗 Je herinvesteert <b>${eur(w.herinvest)}</b> → dat bespaart <b style="color:var(--green)">${eur(w.vpbBesparing)}</b> Vpb, maar kost je <b>${eur(w.herinvest)}</b> cash. Netto ben je <b>${eur(w.herinvest - w.vpbBesparing)}</b> "kwijt" (in ruil voor iets voor het bedrijf). Alleen slim als je die investering tóch wilde doen.</p>` : ''}
     <div class="grid cols-2 mt" style="gap:12px">
       <div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;border-left:4px solid var(--accent)">
         <div class="muted" style="font-size:11px;text-transform:uppercase">💰 Als dividend uitkeren (box 2)</div>
@@ -608,6 +612,8 @@ function wireWinstDoor() {
   const wrap = $('#winstDoorDyn'); if (!wrap) return;
   const kn = wrap.querySelector('#wd_kosten');
   if (kn) kn.onchange = async e => { await saveSetting('kosten_pm_override', Math.max(0, Number(e.target.value) || 0)); rerender(); };
+  const hi = wrap.querySelector('#wd_herinvest');
+  if (hi) hi.onchange = async e => { await saveSetting('herinvest_jaar', Math.max(0, Number(e.target.value) || 0)); rerender(); };
   const rs = wrap.querySelector('#wd_reset');
   if (rs) rs.onclick = async () => { await saveSetting('kosten_pm_override', 0); rerender(); };
 }

@@ -551,10 +551,13 @@ function winstDoorrekening() {
   const flexJaar = flexStats().maandRunRate * 12;
   const plaatsingenVoorDoel = gemFee > 0 ? (doel - flexJaar) / gemFee : null;
 
+  const herinvest = Number(S('herinvest_jaar', 0)) || 0;   // extra aftrekbare kosten om winst/Vpb te drukken
+  const vpbVan = w => { const x = Math.max(0, w); return x <= 200000 ? x * 0.19 : 200000 * 0.19 + (x - 200000) * 0.258; };
   // winst-brug (btw speelt hier NIET — doorgeefgeld)
-  const winstVoorVpb = doel - kostenJaar;
-  const wv = Math.max(0, winstVoorVpb);
-  const vpb = wv <= 200000 ? wv * 0.19 : 200000 * 0.19 + (wv - 200000) * 0.258;   // Vpb 2026
+  const winstVoorVpb = doel - kostenJaar - herinvest;
+  const vpb = vpbVan(winstVoorVpb);   // Vpb 2026
+  const vpbZonderHerinvest = vpbVan(doel - kostenJaar);
+  const vpbBesparing = vpbZonderHerinvest - vpb;
   const nettoWinst = winstVoorVpb - vpb;
   const leningOpen = D.loans[0] ? (Number(D.loans[0].hoofdsom) - D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0)) : 0;
   const leningAflossing = Math.min(Math.max(0, leningOpen), 30000);
@@ -566,6 +569,7 @@ function winstDoorrekening() {
 
   return { kostenMaand, kostenBron, kostenJaar, override, actuals, laatsteMaand: laatste ? laatste.maand : null,
     doel, gemFee, blijf, stopPct: k.stopPct, flexJaar, plaatsingenVoorDoel, plaatsingenYtd: k.plaatsingenYtd,
+    herinvest, vpbZonderHerinvest, vpbBesparing,
     winstVoorVpb, vpb, nettoWinst, leningOpen, leningAflossing, vrij, box2, dividendNetto,
     winstYtd: potjes().winstYtd, saldoNu: D.saldi[0] ? Number(D.saldi[0].saldo) : 0 };
 }
