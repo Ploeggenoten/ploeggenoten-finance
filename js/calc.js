@@ -532,6 +532,25 @@ function jaardoelGps() {
     restJaar, rolling, tempo, gemFee, blijf, flexPm, mndRest };
 }
 
+// ── omzet-doel: omzet/winst nu + hoeveel plaatsingen voor een omzetdoel ──
+function omzetDoel() {
+  const t = todayISO(), jaar = t.slice(0, 4), m = +t.slice(5, 7);
+  const k = kpis(), gemFee = k.gemFee || 8500;
+  // omzet YTD: liefst Yuki (breedst, incl. flex), anders app-facturatie
+  const omzetYtd = Number(S('yuki_omzet_ytd', 0))
+    || D.installments.filter(i => (i.factuurdatum || '').slice(0, 4) === jaar && (i.status === 'gefactureerd' || i.status === 'betaald')).reduce((s, i) => s + +i.bedrag_excl, 0);
+  const winstYtd = potjes().winstYtd;
+  const flexJaar = flexStats().maandRunRate * 12;          // flex-omzet op jaarbasis (run-rate)
+  const doel = Number(S('doel_omzet_jaar', 400000));
+  const wsNodig = Math.max(0, doel - flexJaar);            // W&S-omzet nodig na aftrek flex
+  const plaatsingenNodig = gemFee > 0 ? wsNodig / gemFee : null;
+  const perMnd = plaatsingenNodig != null ? plaatsingenNodig / 12 : null;
+  const verstreken = Math.max(0.5, m - 1 + (+t.slice(8, 10)) / 30);
+  const omzetRunRate = omzetYtd / verstreken * 12;         // op huidig tempo dit jaar
+  return { jaar, doel, omzetYtd, winstYtd, gemFee, flexJaar, wsNodig, plaatsingenNodig, perMnd,
+    plaatsingenYtd: k.plaatsingenYtd, omzetRunRate, pctDoel: doel ? Math.min(1, omzetYtd / doel) : 0, blijf: 1 - (k.stopPct || 0) };
+}
+
 // ── uitkeer-planner (DGA): wat kan er veilig naar privé/aflossing ──
 function uitkeerRuimte(extra = 0) {
   const proj = projectie(12);

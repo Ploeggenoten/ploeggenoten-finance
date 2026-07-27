@@ -579,6 +579,7 @@ function renderCashflow(root) {
   const behoefte = sc.plaatsingenPm;   // per maand nodig voor target
 
   const gps = jaardoelGps();
+  const od = omzetDoel();
   const jaarNu = todayISO().slice(0, 4);
   const gpsBlok = (titel, b) => b ? `
     <div class="panel2box">
@@ -614,8 +615,20 @@ function renderCashflow(root) {
       </div></div>
 
     <div class="panel mb"><div class="spread mb"><h2>🎯 Jaardoel-GPS ${uitlegChip('gps')}</h2>
-      <span class="row" style="gap:8px;align-items:center"><label style="margin:0">Doelwinst ${jaarNu} (€)</label>
-      <input id="gps_doel" type="number" step="5000" min="0" value="${gps.doel ?? ''}" placeholder="bijv. 150000" style="width:120px"></span></div>
+      <span class="row" style="gap:12px;align-items:center;flex-wrap:wrap">
+        <span class="row" style="gap:6px;align-items:center"><label style="margin:0">Doelomzet ${jaarNu} (€)</label>
+        <input id="gps_omzet" type="number" step="10000" min="0" value="${od.doel}" style="width:110px"></span>
+        <span class="row" style="gap:6px;align-items:center"><label style="margin:0">Doelwinst (€)</label>
+        <input id="gps_doel" type="number" step="5000" min="0" value="${gps.doel ?? ''}" placeholder="bijv. 190000" style="width:110px"></span>
+      </span></div>
+      <div class="grid cols-4 mb">
+        <div class="kpi"><div class="lbl">Omzet YTD ${jaarNu}</div><div class="val">${eur(od.omzetYtd)}</div><div class="sub">van ${eur(od.doel)} · ${Math.round(od.pctDoel * 100)}% · koers ~${eur(od.omzetRunRate)}</div></div>
+        <div class="kpi"><div class="lbl">Winst YTD <span class="muted">(vóór Vpb)</span></div><div class="val">${eur(od.winstYtd)}</div><div class="sub">marge ${od.omzetYtd ? Math.round(od.winstYtd / od.omzetYtd * 100) : 0}%</div></div>
+        <div class="kpi accent"><div class="lbl">Nodig voor ${eur(od.doel)}</div><div class="val">${od.plaatsingenNodig != null ? Math.round(od.plaatsingenNodig) : '—'} <span class="muted" style="font-size:13px">plaatsingen</span></div><div class="sub">~${od.perMnd != null ? od.perMnd.toFixed(1) : '—'}/mnd · ná ~${eur(od.flexJaar)} flex</div></div>
+        <div class="kpi"><div class="lbl">Plaatsingen YTD</div><div class="val">${od.plaatsingenYtd}</div><div class="sub">dit jaar tot nu</div></div>
+      </div>
+      <div class="cbar mb" style="height:10px"><i style="width:${Math.round(od.pctDoel * 100)}%;background:var(--accent);display:block;height:100%"></i></div>
+      <p class="muted mb" style="font-size:12px">Voor <b>${eur(od.doel)}</b> omzet heb je ~<b>${od.plaatsingenNodig != null ? Math.round(od.plaatsingenNodig) : '—'} plaatsingen</b> per jaar nodig (${od.perMnd != null ? od.perMnd.toFixed(1) : '—'}/mnd), bij je gem. fee van ${eur(od.gemFee)} en ná de flex-bijdrage. Houd wat marge aan: ~${Math.round((1 - od.blijf) * 100)}% van je plaatsingen stopt en verliest een deel van de fee.</p>
       ${gpsHtml}</div>
 
     <div class="grid cols-2 mb">
@@ -705,7 +718,8 @@ function renderCashflow(root) {
     $('#scv_flex').textContent = Math.round(sc.flexFactor * 100) + '%';
     $('#scv_hire').textContent = eur(sc.extraHirePm);
   };
-  $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Jaardoel opgeslagen ✓'); rerender(); };
+  $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Doelwinst opgeslagen ✓'); rerender(); };
+  $('#gps_omzet').onchange = async e => { await saveSetting('doel_omzet_jaar', Math.max(0, +e.target.value || 0)); toast('Doelomzet opgeslagen ✓'); rerender(); };
   wireUitkeer();
   wireKeten();
   wireInvest();
