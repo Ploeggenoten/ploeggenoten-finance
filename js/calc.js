@@ -532,6 +532,44 @@ function jaardoelGps() {
     restJaar, rolling, tempo, gemFee, blijf, flexPm, mndRest };
 }
 
+// ── winst-doorrekening: omzetdoel → winst → na Vpb → na lening → vrij (uitkeren/investeren) ──
+function winstDoorrekening() {
+  const t = todayISO(), k = kpis();
+  // kostenbasis = laatste AFGESLOTEN maand werkelijk uit Yuki (eerste maanden niet representatief door groei)
+  const actuals = (D.actuals || []).filter(a => a.categorie === 'Werkelijk totaal (Yuki)' && a.bedrag != null)
+    .sort((a, b) => a.maand.localeCompare(b.maand));
+  const laatste = actuals[actuals.length - 1];
+  const override = Number(S('kosten_pm_override', 0)) || 0;
+  const kostenMaand = override > 0 ? override : (laatste ? Number(laatste.bedrag) : budgetVoorMaand(monthKey(t)));
+  const kostenBron = override > 0 ? 'handmatig ingesteld'
+    : (laatste ? `werkelijk ${fmtMaand(laatste.maand)} (Yuki)` : 'budget (nog geen Yuki-realisatie)');
+  const kostenJaar = kostenMaand * 12;
+
+  const doel = Number(S('doel_omzet_jaar', 400000));
+  const gemFee = k.gemFee || 8604;
+  const blijf = 1 - (k.stopPct || 0);
+  const flexJaar = flexStats().maandRunRate * 12;
+  const plaatsingenVoorDoel = gemFee > 0 ? (doel - flexJaar) / gemFee : null;
+
+  // winst-brug (btw speelt hier NIET — doorgeefgeld)
+  const winstVoorVpb = doel - kostenJaar;
+  const wv = Math.max(0, winstVoorVpb);
+  const vpb = wv <= 200000 ? wv * 0.19 : 200000 * 0.19 + (wv - 200000) * 0.258;   // Vpb 2026
+  const nettoWinst = winstVoorVpb - vpb;
+  const leningOpen = D.loans[0] ? (Number(D.loans[0].hoofdsom) - D.loanPayments.filter(lp => !lp.gepland).reduce((s, l) => s + +l.bedrag, 0)) : 0;
+  const leningAflossing = Math.min(Math.max(0, leningOpen), 30000);
+  const vrij = nettoWinst - leningAflossing;
+  // als dividend (box 2 2026: 24,5% tot €68.843, 31% erboven)
+  const v = Math.max(0, vrij);
+  const box2 = v <= 68843 ? v * 0.245 : 68843 * 0.245 + (v - 68843) * 0.31;
+  const dividendNetto = vrij - box2;
+
+  return { kostenMaand, kostenBron, kostenJaar, override, actuals, laatsteMaand: laatste ? laatste.maand : null,
+    doel, gemFee, blijf, stopPct: k.stopPct, flexJaar, plaatsingenVoorDoel, plaatsingenYtd: k.plaatsingenYtd,
+    winstVoorVpb, vpb, nettoWinst, leningOpen, leningAflossing, vrij, box2, dividendNetto,
+    winstYtd: potjes().winstYtd, saldoNu: D.saldi[0] ? Number(D.saldi[0].saldo) : 0 };
+}
+
 // ── omzet-doel: omzet/winst nu + hoeveel plaatsingen voor een omzetdoel ──
 function omzetDoel() {
   const t = todayISO(), jaar = t.slice(0, 4), m = +t.slice(5, 7);

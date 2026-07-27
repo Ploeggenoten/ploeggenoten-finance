@@ -108,6 +108,10 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> per klant het afgesproken W&S-tarief naast je gewogen gemiddelde, en hoeveel "rek" er op jaarbasis zit als een klant naar dat gemiddelde zou gaan.</p>
     <p><b>Hoe berekend:</b> netto omzet per klant dit jaar (na vervallen termijnen), geëxtrapoleerd naar 12 maanden; rek = die jaaromzet × het tariefverschil. Gemiddelde is gewogen naar omzet.</p>
     <p><b>Hoe sturen:</b> dit is onderhandelmunitie: bij contractverlenging of een nieuwe aanvraag weet je precies welke klant onder je norm zit en wat één procentpunt waard is. "Geen tarief ✎" = vastleggen bij Instellingen.</p>` },
+  winstdoor: { t: '💶 Winst-doorrekening', h: `
+    <p><b>Wat je ziet:</b> van je omzetdoel stap voor stap naar wat je écht overhoudt — na kosten, na Vpb, na de lening — en wat je dan kunt uitkeren of investeren.</p>
+    <p><b>Hoe berekend:</b> kosten = je laatste afgesloten maand uit Yuki × 12 (de vroege maanden zijn niet representatief door je groei; je kunt de basis handmatig overschrijven). Winst = omzet − kosten. Vpb 19% (25,8% boven €200k). Netto winst − €30k lening = vrij. Als dividend: min box 2 (24,5/31%). Btw zit er niet in — dat is doorgeefgeld.</p>
+    <p><b>Hoe sturen:</b> pas het omzetdoel (GPS hierboven) of de kostenbasis aan en zie direct wat er onderaan overblijft. Klap "Hoe kom ik aan deze cijfers?" open om elke stap te controleren.</p>` },
   invest: { t: '🧮 Investeringsbeslisser', h: `
     <p><b>Wat je ziet:</b> tik een investering in (recruiter, marketing, auto, aankoop of vrij) en de app zegt of je 'm je nu kunt veroorloven — met de impact op je buffer, break-even, krapste saldo en terugverdientijd.</p>
     <p><b>Hoe berekend:</b> een eenmalige uitgave drukt je hele saldopad omlaag; een maandlast verhoogt je vaste lasten (en dus je break-even). "Verantwoord" = op je krapste punt de komende 12 maanden blijf je boven je gewenste buffer (Uitkeer-planner). Terugverdientijd = eenmalig ÷ (extra omzet − maandlast).</p>
@@ -549,6 +553,65 @@ function weekCashHtml() {
     <p class="muted mt" style="font-size:11px">Vaste lasten zijn per week uitgesmeerd; btw-afdrachten en aflossingen staan op hun echte datum (daar zie je de dips). Nieuwe, nog niet-gefactureerde W&S-omzet zit hier <b>niet</b> in — dit is je zekere kaspositie.</p>`;
 }
 
+// ── winst-doorrekening (transparante winst-brug) ───────────────
+function winstDoorHtml() {
+  const w = winstDoorrekening();
+  const line = (label, bedrag, o = {}) => `<tr style="${o.sum ? 'border-top:1px solid var(--line);font-weight:700' : ''}">
+    <td style="padding:6px 4px">${label}</td>
+    <td class="num" style="padding:6px 4px;${o.neg ? 'color:var(--red)' : ''}${o.big ? ';font-size:18px' : ''}">${o.neg ? '−' : ''}${eur(Math.abs(bedrag))}</td></tr>`;
+  return `
+    <div class="grid cols-2 mb" style="gap:12px">
+      <label class="muted" style="font-size:12px;display:block">Kosten per maand (basis) €<br>
+        <input id="wd_kosten" type="number" min="0" step="500" value="${Math.round(w.kostenMaand)}" style="width:100%"></label>
+      <div class="muted" style="font-size:12px;align-self:end">bron: <b>${esc(w.kostenBron)}</b> ${w.override ? `<button class="btn small ghost" id="wd_reset">↺ terug naar Yuki</button>` : ''}</div>
+    </div>
+    <div class="table-wrap"><table style="font-size:14px">
+      ${line('Omzet (doel)', w.doel)}
+      ${line(`− Kosten <span class="muted">(${eur(w.kostenMaand)}/mnd × 12)</span>`, w.kostenJaar, { neg: true })}
+      ${line('= Winst vóór Vpb', w.winstVoorVpb, { sum: true })}
+      ${line('− Vpb <span class="muted">(19% tot €200k, 25,8% erboven)</span>', w.vpb, { neg: true })}
+      ${line('= Netto winst (na Vpb)', w.nettoWinst, { sum: true })}
+      ${line('− Aflossing lening moeder', w.leningAflossing, { neg: true })}
+      ${line('<b>= Vrij: uitkeren of investeren</b>', w.vrij, { sum: true, big: true })}
+    </table></div>
+    <div class="grid cols-2 mt" style="gap:12px">
+      <div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;border-left:4px solid var(--accent)">
+        <div class="muted" style="font-size:11px;text-transform:uppercase">💰 Als dividend uitkeren (box 2)</div>
+        <div style="font-size:18px;font-weight:700">${eur(w.dividendNetto)} <span class="muted" style="font-size:12px;font-weight:400">netto privé</span></div>
+        <div class="muted" style="font-size:11px">na box 2 ${eur(w.box2)}</div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px">
+        <div class="muted" style="font-size:11px;text-transform:uppercase">🏗 Of investeren in het bedrijf</div>
+        <div style="font-size:18px;font-weight:700">${eur(w.vrij)}</div>
+        <div class="muted" style="font-size:11px">volledig herinvesteren (geen box 2)</div>
+      </div>
+    </div>
+    <p class="muted mt" style="font-size:12px">ℹ️ <b>Btw staat hier bewust niet in</b> — dat is doorgeefgeld (je int het van klanten en stort het door), het verlaagt je winst niet en is over het jaar cash-neutraal. De lening (€30k) is géén kosten maar een balanspost; hij verlaagt wél je vrije cash.</p>
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-weight:600">🔍 Hoe kom ik precies aan deze cijfers?</summary>
+      <div style="font-size:13px;margin-top:8px">
+        <p><b>Kostenbasis:</b> je laatste afgesloten maand (${w.laatsteMaand ? fmtMaand(w.laatsteMaand) : '—'}) uit Yuki = <b>${eur(w.kostenMaand)}</b>. De eerste maanden laat ik bewust vallen — die zijn niet representatief door je groei:</p>
+        <div class="table-wrap"><table style="font-size:12px">
+          <tr><th>Maand</th><th class="num">Werkelijke kosten (Yuki)</th></tr>
+          ${w.actuals.map(a => `<tr><td>${fmtMaand(a.maand)}</td><td class="num">${eur(a.bedrag)}</td></tr>`).join('')}
+        </table></div>
+        <p style="margin-top:8px"><b>Omzet per plaatsing:</b> gemiddelde fee van je plaatsingen dit jaar = ${eur(w.gemFee)}.<br>
+        <b>Uitval:</b> ${Math.round(w.stopPct * 100)}% van je plaatsingen stopt (blijfkans ${Math.round(w.blijf * 100)}%) — een gestopte verliest een deel van de fee, dus houd marge aan.<br>
+        <b>Plaatsingen voor ${eur(w.doel)}:</b> (${eur(w.doel)} − ${eur(w.flexJaar)} flex) ÷ ${eur(w.gemFee)} = <b>${w.plaatsingenVoorDoel != null ? Math.round(w.plaatsingenVoorDoel) : '—'} plaatsingen/jaar</b>. Je zit op ${w.plaatsingenYtd} YTD.<br>
+        <b>Vpb:</b> 19% over de winst tot €200k, 25,8% daarboven (tarief 2026).<br>
+        <b>Box 2 (dividend):</b> 24,5% tot €68.843, 31% daarboven.</p>
+        <p class="muted">Live nu: winst YTD <b>${eur(w.winstYtd)}</b>, banksaldo <b>${eur(w.saldoNu)}</b>. Dit blok is de <b>prognose</b> bij ${eur(w.doel)} omzet; de exacte stand op de bank per datum volgt uit de 13-weken cashflow en de saldo-projectie (die verrekenen de timing van btw, Vpb en facturen).</p>
+      </div>
+    </details>`;
+}
+function wireWinstDoor() {
+  const wrap = $('#winstDoorDyn'); if (!wrap) return;
+  const kn = wrap.querySelector('#wd_kosten');
+  if (kn) kn.onchange = async e => { await saveSetting('kosten_pm_override', Math.max(0, Number(e.target.value) || 0)); rerender(); };
+  const rs = wrap.querySelector('#wd_reset');
+  if (rs) rs.onclick = async () => { await saveSetting('kosten_pm_override', 0); rerender(); };
+}
+
 // ── hoofdview ──────────────────────────────────────────────────
 function renderCashflow(root) {
   const tgt0 = targetInfo().aantalTarget;
@@ -627,6 +690,9 @@ function renderCashflow(root) {
       <div class="cbar mb" style="height:10px"><i style="width:${Math.round(od.pctDoel * 100)}%;background:var(--accent);display:block;height:100%"></i></div>
       <p class="muted mb" style="font-size:12px">Voor <b>${eur(od.doel)}</b> omzet heb je ~<b>${od.plaatsingenNodig != null ? Math.round(od.plaatsingenNodig) : '—'} plaatsingen</b> per jaar nodig (${od.perMnd != null ? od.perMnd.toFixed(1) : '—'}/mnd), bij je gem. fee van ${eur(od.gemFee)} en ná de flex-bijdrage. Houd wat marge aan: ~${Math.round((1 - od.blijf) * 100)}% van je plaatsingen stopt en verliest een deel van de fee.</p>
       ${gpsHtml}</div>
+
+    <div class="panel mb"><h2>💶 Winst-doorrekening <span class="muted">— van omzet tot wat je overhoudt</span> ${uitlegChip('winstdoor')}</h2>
+      <div id="winstDoorDyn">${winstDoorHtml()}</div></div>
 
     <div class="grid cols-2 mb">
       <div class="panel"><h2>🧮 Investeringsbeslisser <span class="muted">— kan ik dit veroorloven?</span> ${uitlegChip('invest')}</h2>
@@ -720,6 +786,7 @@ function renderCashflow(root) {
   wireUitkeer();
   wireKeten();
   wireInvest();
+  wireWinstDoor();
   $('#sc_load').onchange = e => cfLoadScenario(e.target.value);
   $('#sc_save').onclick = openSaveScenario;
   $('#sc_star').onclick = () => { const n = $('#sc_load').value; if (!n) return toast('Kies eerst een opgeslagen scenario', true); cfSetDefaultScenario(n); };
