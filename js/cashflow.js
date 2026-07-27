@@ -561,12 +561,14 @@ function winstDoorHtml() {
     <td class="num" style="padding:6px 4px;${o.neg ? 'color:var(--red)' : ''}${o.big ? ';font-size:18px' : ''}">${o.neg ? '−' : ''}${eur(Math.abs(bedrag))}</td></tr>`;
   return `
     <div class="grid cols-3 mb" style="gap:12px">
-      <label class="muted" style="font-size:12px;display:block">Kosten per maand (basis) €<br>
-        <input id="wd_kosten" type="number" min="0" step="500" value="${Math.round(w.kostenMaand)}" style="width:100%"></label>
+      <label class="muted" style="font-size:12px;display:block">Kosten/mnd (Yuki-basis) €<br>
+        <input id="wd_kosten" type="number" min="0" step="500" value="${Math.round(w.basisKosten)}" style="width:100%"></label>
+      <label class="muted" style="font-size:12px;display:block">+ Extra loonkosten/mnd €<br>
+        <input id="wd_extraloon" type="number" min="0" step="100" value="${Math.round(w.extraLoon)}" style="width:100%"></label>
       <label class="muted" style="font-size:12px;display:block">Herinvesteren dit jaar €<br>
         <input id="wd_herinvest" type="number" min="0" step="5000" value="${Math.round(w.herinvest)}" style="width:100%"></label>
-      <div class="muted" style="font-size:12px;align-self:end">kosten-bron: <b>${esc(w.kostenBron)}</b> ${w.override ? `<button class="btn small ghost" id="wd_reset">↺ Yuki</button>` : ''}</div>
     </div>
+    <div class="muted mb" style="font-size:12px">Kostenbasis: <b>${eur(w.basisKosten)}</b>${w.extraLoon > 0 ? ` + <b>${eur(w.extraLoon)}</b> extra loon = <b>${eur(w.kostenMaand)}</b>` : ''}/mnd · bron: <b>${esc(w.kostenBron)}</b> ${w.override ? `<button class="btn small ghost" id="wd_reset">↺ terug naar Yuki</button>` : ''}</div>
     <div class="table-wrap"><table style="font-size:14px">
       ${line('Omzet (doel)', w.doel)}
       ${line(`− Kosten <span class="muted">(${eur(w.kostenMaand)}/mnd × 12)</span>`, w.kostenJaar, { neg: true })}
@@ -612,6 +614,8 @@ function wireWinstDoor() {
   const wrap = $('#winstDoorDyn'); if (!wrap) return;
   const kn = wrap.querySelector('#wd_kosten');
   if (kn) kn.onchange = async e => { await saveSetting('kosten_pm_override', Math.max(0, Number(e.target.value) || 0)); rerender(); };
+  const el = wrap.querySelector('#wd_extraloon');
+  if (el) el.onchange = async e => { await saveSetting('extra_loon_pm', Math.max(0, Number(e.target.value) || 0)); rerender(); };
   const hi = wrap.querySelector('#wd_herinvest');
   if (hi) hi.onchange = async e => { await saveSetting('herinvest_jaar', Math.max(0, Number(e.target.value) || 0)); rerender(); };
   const rs = wrap.querySelector('#wd_reset');

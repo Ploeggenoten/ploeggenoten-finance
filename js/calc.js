@@ -540,7 +540,9 @@ function winstDoorrekening() {
     .sort((a, b) => a.maand.localeCompare(b.maand));
   const laatste = actuals[actuals.length - 1];
   const override = Number(S('kosten_pm_override', 0)) || 0;
-  const kostenMaand = override > 0 ? override : (laatste ? Number(laatste.bedrag) : budgetVoorMaand(monthKey(t)));
+  const basisKosten = override > 0 ? override : (laatste ? Number(laatste.bedrag) : budgetVoorMaand(monthKey(t)));
+  const extraLoon = Number(S('extra_loon_pm', 0)) || 0;    // nieuwe hire nog niet in de Yuki-basis (bv. Rajesh vanaf okt)
+  const kostenMaand = basisKosten + extraLoon;
   const kostenBron = override > 0 ? 'handmatig ingesteld'
     : (laatste ? `werkelijk ${fmtMaand(laatste.maand)} (Yuki)` : 'budget (nog geen Yuki-realisatie)');
   const kostenJaar = kostenMaand * 12;
@@ -567,7 +569,7 @@ function winstDoorrekening() {
   const box2 = v <= 68843 ? v * 0.245 : 68843 * 0.245 + (v - 68843) * 0.31;
   const dividendNetto = vrij - box2;
 
-  return { kostenMaand, kostenBron, kostenJaar, override, actuals, laatsteMaand: laatste ? laatste.maand : null,
+  return { kostenMaand, basisKosten, extraLoon, kostenBron, kostenJaar, override, actuals, laatsteMaand: laatste ? laatste.maand : null,
     doel, gemFee, blijf, stopPct: k.stopPct, flexJaar, plaatsingenVoorDoel, plaatsingenYtd: k.plaatsingenYtd,
     herinvest, vpbZonderHerinvest, vpbBesparing,
     winstVoorVpb, vpb, nettoWinst, leningOpen, leningAflossing, vrij, box2, dividendNetto,
