@@ -569,9 +569,11 @@ function winstDoorrekening() {
   const box2 = v <= 68843 ? v * 0.245 : 68843 * 0.245 + (v - 68843) * 0.31;
   const dividendNetto = vrij - box2;
 
+  const winstmarge = doel > 0 ? winstVoorVpb / doel : 0;      // na alle kosten, vóór Vpb
+  const nettoMarge = doel > 0 ? nettoWinst / doel : 0;        // na Vpb
   return { kostenMaand, basisKosten, extraLoon, kostenBron, kostenJaar, override, actuals, laatsteMaand: laatste ? laatste.maand : null,
     doel, gemFee, blijf, stopPct: k.stopPct, flexJaar, plaatsingenVoorDoel, plaatsingenYtd: k.plaatsingenYtd,
-    herinvest, vpbZonderHerinvest, vpbBesparing,
+    herinvest, vpbZonderHerinvest, vpbBesparing, winstmarge, nettoMarge,
     winstVoorVpb, vpb, nettoWinst, leningOpen, leningAflossing, vrij, box2, dividendNetto,
     winstYtd: potjes().winstYtd, saldoNu: D.saldi[0] ? Number(D.saldi[0].saldo) : 0 };
 }

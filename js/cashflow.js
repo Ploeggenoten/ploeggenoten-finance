@@ -581,6 +581,10 @@ function winstDoorHtml() {
     </table></div>
     ${w.herinvest > 0 ? `<p class="muted mt" style="font-size:12px;background:var(--limebg);border-radius:8px;padding:8px 10px">🏗 Je herinvesteert <b>${eur(w.herinvest)}</b> → dat bespaart <b style="color:var(--green)">${eur(w.vpbBesparing)}</b> Vpb, maar kost je <b>${eur(w.herinvest)}</b> cash. Netto ben je <b>${eur(w.herinvest - w.vpbBesparing)}</b> "kwijt" (in ruil voor iets voor het bedrijf). Alleen slim als je die investering tóch wilde doen.</p>` : ''}
     <div class="grid cols-2 mt" style="gap:12px">
+      <div class="kpi"><div class="lbl">Winstmarge <span class="muted">(na alle kosten, vóór Vpb)</span></div><div class="val">${(w.winstmarge * 100).toFixed(1)}%</div><div class="sub">${eur(w.winstVoorVpb)} winst ÷ ${eur(w.doel)} omzet</div></div>
+      <div class="kpi accent"><div class="lbl">Netto winstmarge <span class="muted">(na Vpb)</span></div><div class="val">${(w.nettoMarge * 100).toFixed(1)}%</div><div class="sub">${eur(w.nettoWinst)} netto ÷ ${eur(w.doel)} omzet</div></div>
+    </div>
+    <div class="grid cols-2 mt" style="gap:12px">
       <div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;border-left:4px solid var(--accent)">
         <div class="muted" style="font-size:11px;text-transform:uppercase">💰 Als dividend uitkeren (box 2)</div>
         <div style="font-size:18px;font-weight:700">${eur(w.dividendNetto)} <span class="muted" style="font-size:12px;font-weight:400">netto privé</span></div>
