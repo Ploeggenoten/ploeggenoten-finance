@@ -601,7 +601,12 @@ function omzetDoel() {
   const perMnd = plaatsingenNodig != null ? plaatsingenNodig / 12 : null;
   const verstreken = Math.max(0.5, m - 1 + (+t.slice(8, 10)) / 30);
   const omzetRunRate = omzetYtd / verstreken * 12;         // op huidig tempo dit jaar
+  // gecontracteerd: getekende deals waarvan de termijnen nog gefactureerd moeten worden
+  // (openstaand/gefactureerd zit al IN omzetYtd — factuurstelsel — dus niet dubbel tellen)
+  const nogTeFact = k.nogTeFactureren, openstaand = k.openstaand;
+  const gecontracteerd = omzetYtd + nogTeFact;
   return { jaar, doel, omzetYtd, winstYtd, gemFee, flexJaar, wsNodig, plaatsingenNodig, perMnd,
+    nogTeFact, openstaand, gecontracteerd,
     plaatsingenYtd: k.plaatsingenYtd, omzetRunRate, pctDoel: doel ? Math.min(1, omzetYtd / doel) : 0, blijf: 1 - (k.stopPct || 0) };
 }
 
