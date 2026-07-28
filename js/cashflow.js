@@ -657,7 +657,7 @@ function renderWinstDoelen(root) {
   // gecontracteerd (nog te factureren van getekende deals) telt mee als zeker — vergt geen nieuwe plaatsingen
   const omzetTeGaan = Math.max(0, od.doel - od.omzetYtd);
   const flexRest = gps.flexPm * mndRest;
-  const plOmzet = netPerPl > 0 ? Math.max(0, omzetTeGaan - od.nogTeFact - flexRest) / netPerPl : null;
+  const plOmzet = netPerPl > 0 ? Math.max(0, omzetTeGaan - od.nogTeFactVoorzichtig - flexRest) / netPerPl : null;
   // winst-spoor: plaatsingen nodig voor het winstdoel (uit de GPS)
   const plWinst = gps.restJaar ? gps.restJaar.plaats : null;
   const plNodig = Math.max(plOmzet ?? 0, plWinst ?? 0);
@@ -673,16 +673,24 @@ function renderWinstDoelen(root) {
   const winstKoers = gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null && gps.tempo >= gps.restJaar.perMnd;
   const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
 
-  const doelKaart = (titel, ytd, doelBedrag, koersOk, koersTxt, plus = null) => {
-    const pctD = doelBedrag > 0 ? Math.max(0, Math.min(1, ytd / doelBedrag)) : 0;
-    const pctP = plus && doelBedrag > 0 ? Math.max(0, Math.min(1 - pctD, plus.bedrag / doelBedrag)) : 0;
+  // kaart met drie lagen: ontvangen (kas) → gefactureerd (officieel) → +gecontracteerd (voorzichtig)
+  const doelKaart = (titel, ytd, doelBedrag, koersOk, koersTxt, lg = null) => {
+    const pw = x => doelBedrag > 0 ? Math.max(0, Math.min(100, Math.round(x / doelBedrag * 100))) : 0;
+    const pctD = pw(ytd);
+    const w1 = lg ? pw(lg.ontv) : pctD, w2 = lg ? Math.max(0, pctD - w1) : 0, w3 = lg ? Math.max(0, Math.min(100 - pctD, pw(lg.nogV))) : 0;
+    const rij = (ico, label, cum) => `<div style="display:flex;gap:7px;align-items:baseline;font-size:12px;padding:2.5px 0">
+      <span>${ico}</span><span style="flex:1" class="muted">${label}</span>
+      <span style="white-space:nowrap;font-variant-numeric:tabular-nums"><b>${eur(cum)}</b> <span class="muted">(${pw(cum)}%)</span></span></div>`;
     return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px 16px">
       <div class="spread" style="margin-bottom:4px"><b style="font-size:13px;text-transform:uppercase;letter-spacing:.5px">${titel}</b>
         ${ytd >= doelBedrag && doelBedrag > 0 ? tag('🎉 gehaald', 'green') : koersOk ? tag('✓ op koers', 'green') : tag('⚠ achter op koers', 'amber')}</div>
-      <div style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">${eur(ytd)} <span class="muted" style="font-size:14px;font-weight:400">/ ${eur(doelBedrag)} (${Math.round(pctD * 100)}%)</span></div>
-      <div class="cbar" style="height:10px;margin:8px 0 6px;white-space:nowrap"><i style="width:${Math.round(pctD * 100)}%;background:${ytd >= doelBedrag && doelBedrag > 0 ? 'var(--green)' : 'var(--accent)'};display:inline-block;height:100%;vertical-align:top"></i>${pctP > 0 ? `<i style="width:${Math.round(pctP * 100)}%;background:var(--accent);opacity:.4;display:inline-block;height:100%;vertical-align:top" title="${esc(plus.label)}"></i>` : ''}</div>
-      ${plus ? `<div style="font-size:12px;margin-bottom:4px">📄 + ${eur(plus.bedrag)} ${plus.label} → <b>${eur(ytd + plus.bedrag)} (${doelBedrag > 0 ? Math.round((ytd + plus.bedrag) / doelBedrag * 100) : 0}%)</b></div>` : ''}
-      <div class="muted" style="font-size:12px">${koersTxt}</div>
+      <div style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">${eur(ytd)} <span class="muted" style="font-size:14px;font-weight:400">/ ${eur(doelBedrag)} (${pctD}%)</span></div>
+      <div class="cbar" style="height:10px;margin:8px 0 6px;white-space:nowrap"><i style="width:${w1}%;background:var(--green);display:inline-block;height:100%;vertical-align:top" title="ontvangen"></i><i style="width:${w2}%;background:var(--accent);display:inline-block;height:100%;vertical-align:top" title="openstaand"></i><i style="width:${w3}%;background:var(--accent);opacity:.35;display:inline-block;height:100%;vertical-align:top" title="gecontracteerd"></i></div>
+      ${lg ? `
+      ${rij('✅', 'Ontvangen — staat op je bank', lg.ontv)}
+      ${rij('📤', `+ openstaand ${eur(lg.open)} = <b>gefactureerd</b> (officieel YTD)`, ytd)}
+      ${rij('📄', `+ nog te factureren, voorzichtig ×${Math.round(lg.vf * 100)}% <span title="bruto ${eur(lg.nogBruto)}">(bruto ${eur(lg.nogBruto)})</span>`, ytd + lg.nogV)}` : ''}
+      <div class="muted" style="font-size:12px;margin-top:4px">${koersTxt}</div>
     </div>`;
   };
 
@@ -696,15 +704,15 @@ function renderWinstDoelen(root) {
       ${doelKaart('💶 Omzet ' + jaarNu, od.omzetYtd, od.doel, omzetKoers,
         omzetTeGaan <= 0 ? 'Doel binnen — alles erboven is bonus.'
           : `nog <b>${eur(omzetTeGaan)}</b> in ${mndRest} mnd · op huidige koers eindig je op ~<b>${eur(od.omzetRunRate)}</b>${omzetKoers ? '' : ` (<b>${eur(Math.max(0, od.doel - od.omzetRunRate))}</b> tekort als je niets verandert)`}`,
-        od.nogTeFact > 0 ? { bedrag: od.nogTeFact, label: 'gecontracteerd — getekend, nog te factureren' } : null)}
+        { ontv: od.ontvangen, open: od.openstaand, nogV: od.nogTeFactVoorzichtig, nogBruto: od.nogTeFact, vf: od.voorzichtigFactor })}
       ${gps.doel == null
         ? `<div style="border:1px dashed var(--line);border-radius:12px;padding:14px 16px" class="empty">Vul rechtsboven je doelwinst in voor de winst-kant.</div>`
         : doelKaart('📊 Winst ' + jaarNu + ' (vóór Vpb)', gps.winstYtd, gps.doel, winstKoers,
           gps.teGaan <= 0 ? 'Doel binnen — alles erboven is bonus.'
             : `nog <b>${eur(gps.teGaan)}</b> in ${mndRest} mnd · marge nu ${od.omzetYtd ? Math.round(od.winstYtd / od.omzetYtd * 100) : 0}%`,
-          od.nogTeFact > 0 ? { bedrag: od.nogTeFact, label: 'gecontracteerd onderweg (maandkosten lopen wel door)' } : null)}
+          { ontv: Math.max(0, gps.winstYtd - od.openstaand), open: od.openstaand, nogV: od.nogTeFactVoorzichtig, nogBruto: od.nogTeFact, vf: od.voorzichtigFactor })}
     </div>
-    <p class="muted" style="font-size:11px;margin:6px 0 10px">ℹ️ Je <b>openstaande facturen (${eur(od.openstaand)})</b> zitten al ín omzet & winst YTD (gefactureerd = omzet, factuurstelsel) — die tellen we niet dubbel; wanneer dat geld op je bank staat zie je bij Cashflow. Het lichte stuk van de balk = <b>gecontracteerd</b>: getekende deals waarvan de termijnen nog gefactureerd worden. Vrijwel zeker geld — al kan bij een vroege stop een 50%-termijn vervallen.</p>
+    <p class="muted" style="font-size:11px;margin:6px 0 10px">ℹ️ <b>Drie lagen:</b> ✅ <b>ontvangen</b> = gefactureerd én betaald (staat echt op je bank) · 📤 <b>gefactureerd</b> = incl. openstaande facturen (${eur(od.openstaand)}) — dit is je officiële omzet/winst (factuurstelsel); het geld is onderweg, wanneer het op je bank staat zie je bij Cashflow · 📄 <b>gecontracteerd</b> = getekende deals waarvan termijnen nog gefactureerd worden — <b>voorzichtig gerekend ×${Math.round(od.voorzichtigFactor * 100)}%</b> omdat termijnen vervallen als iemand stopt (je historische verval-ratio). Bij winst: extra omzet vloeit vrijwel 1-op-1 door (maandkosten lopen toch al).</p>
     <div style="border:2px solid var(--accent);border-radius:12px;padding:14px 16px;background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
       <div class="spread" style="margin-bottom:4px"><b>📋 Zo haal je het — nog ${mndRest} maanden t/m 31 dec</b>
         <span class="muted" style="font-size:11px">strengste van beide doelen telt (nu: ${leidend})</span></div>
