@@ -604,9 +604,13 @@ function omzetDoel() {
   // drie lagen: ontvangen (kas) → gefactureerd (officieel YTD) → gecontracteerd (getekend, nog te factureren)
   const nogTeFact = k.nogTeFactureren, openstaand = k.openstaand;
   const ontvangen = Math.max(0, omzetYtd - openstaand);           // gefactureerd én betaald
-  // voorzichtig: toekomstige termijnen kunnen vervallen bij stops — historische verval-ratio als korting
-  const voorzichtigFactor = k.feeTot > 0 ? Math.max(0, 1 - k.vervallen / k.feeTot) : 1 - (k.stopPct || 0);
-  const nogTeFactVoorzichtig = nogTeFact * voorzichtigFactor;
+  // voorzichtig: 1e termijnen (facturatie bij tekenen) zijn veilig — historisch 0% vervallen;
+  // latere termijnen vervallen als iemand stopt → weeg die met de blijfkans
+  const blijfk = 1 - (k.stopPct || 0);
+  const potT1 = D.installments.filter(i => i.status === 'te_factureren' && i.termijn_nr === 1)
+    .reduce((s, i) => s + +i.bedrag_excl, 0);
+  const nogTeFactVoorzichtig = potT1 + Math.max(0, nogTeFact - potT1) * blijfk;
+  const voorzichtigFactor = nogTeFact > 0 ? nogTeFactVoorzichtig / nogTeFact : 1;
   const gecontracteerd = omzetYtd + nogTeFact;
   const gecontracteerdVoorzichtig = omzetYtd + nogTeFactVoorzichtig;
   return { jaar, doel, omzetYtd, winstYtd, gemFee, flexJaar, wsNodig, plaatsingenNodig, perMnd,
