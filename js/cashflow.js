@@ -687,7 +687,7 @@ function renderWinstDoelen(root) {
       <div style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">${eur(ytd)} <span class="muted" style="font-size:14px;font-weight:400">/ ${eur(doelBedrag)} (${pctD}%)</span></div>
       <div class="cbar" style="height:10px;margin:8px 0 6px;white-space:nowrap"><i style="width:${w1}%;background:var(--green);display:inline-block;height:100%;vertical-align:top" title="ontvangen"></i><i style="width:${w2}%;background:var(--accent);display:inline-block;height:100%;vertical-align:top" title="openstaand"></i><i style="width:${w3}%;background:var(--accent);opacity:.35;display:inline-block;height:100%;vertical-align:top" title="gecontracteerd"></i></div>
       ${lg ? `
-      ${rij('✅', 'Ontvangen — staat op je bank', lg.ontv)}
+      ${rij('✅', 'Ontvangen — gefactureerd én betaald', lg.ontv)}
       ${rij('📤', `+ openstaand ${eur(lg.open)} = <b>gefactureerd</b> (officieel YTD)`, ytd)}
       ${rij('📄', `+ nog te factureren, voorzichtig ×${Math.round(lg.vf * 100)}% <span title="bruto ${eur(lg.nogBruto)}">(bruto ${eur(lg.nogBruto)})</span>`, ytd + lg.nogV)}` : ''}
       <div class="muted" style="font-size:12px;margin-top:4px">${koersTxt}</div>
@@ -712,7 +712,7 @@ function renderWinstDoelen(root) {
             : `nog <b>${eur(gps.teGaan)}</b> in ${mndRest} mnd · marge nu ${od.omzetYtd ? Math.round(od.winstYtd / od.omzetYtd * 100) : 0}%`,
           { ontv: Math.max(0, gps.winstYtd - od.openstaand), open: od.openstaand, nogV: od.nogTeFactVoorzichtig, nogBruto: od.nogTeFact, vf: od.voorzichtigFactor })}
     </div>
-    <p class="muted" style="font-size:11px;margin:6px 0 10px">ℹ️ <b>Drie lagen:</b> ✅ <b>ontvangen</b> = gefactureerd én betaald (staat echt op je bank) · 📤 <b>gefactureerd</b> = incl. openstaande facturen (${eur(od.openstaand)}) — dit is je officiële omzet/winst (factuurstelsel); het geld is onderweg, wanneer het op je bank staat zie je bij Cashflow · 📄 <b>gecontracteerd</b> = getekende deals waarvan termijnen nog gefactureerd worden — <b>voorzichtig gerekend ×${Math.round(od.voorzichtigFactor * 100)}%</b> omdat termijnen vervallen als iemand stopt (je historische verval-ratio). Bij winst: extra omzet vloeit vrijwel 1-op-1 door (maandkosten lopen toch al).</p>
+    <p class="muted" style="font-size:11px;margin:6px 0 10px">ℹ️ <b>Drie lagen:</b> ✅ <b>ontvangen</b> = omzet die al betaald is (excl. btw) — let op: dit is <b>niet</b> je banksaldo (${D.saldi[0] ? eur(D.saldi[0].saldo) : '—'}): uit je bank gingen ook kosten, btw-afdrachten en aflossingen, en er kwam btw bovenop binnen · 📤 <b>gefactureerd</b> = incl. openstaande facturen (${eur(od.openstaand)}) — je officiële omzet/winst (factuurstelsel); wanneer dat geld op je bank staat zie je bij Cashflow · 📄 <b>gecontracteerd</b> = getekende deals waarvan termijnen nog gefactureerd worden — <b>voorzichtig gerekend ×${Math.round(od.voorzichtigFactor * 100)}%</b> omdat termijnen vervallen als iemand stopt (je historische verval-ratio). Bij winst: extra omzet vloeit vrijwel 1-op-1 door (maandkosten lopen toch al).</p>
     <div style="border:2px solid var(--accent);border-radius:12px;padding:14px 16px;background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
       <div class="spread" style="margin-bottom:4px"><b>📋 Zo haal je het — nog ${mndRest} maanden t/m 31 dec</b>
         <span class="muted" style="font-size:11px">strengste van beide doelen telt (nu: ${leidend})</span></div>
