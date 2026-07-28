@@ -669,6 +669,11 @@ function renderWinstDoelen(root) {
   const offPerPl = kt.offerPerPlaatsing, voorPerOff = kt.voorPerOffer;
   const offersPerMnd = offPerPl != null && plPerMnd != null ? plPerMnd * offPerPl : null;
   const voorstPerMnd = offersPerMnd != null && voorPerOff != null ? offersPerMnd * voorPerOff : null;
+  // flex in dezelfde munt: wat is 1 flexkracht (vol traject t/m overname) waard t.o.v. een W&S-plaatsing
+  const flexActief = (D.flexPl || []).filter(f => !f.einde);
+  const flexWaardes = flexActief.map(f => flexPlBerekening(f).overnameWaarde).filter(Boolean);
+  const gemFlexWaarde = flexWaardes.length ? flexWaardes.reduce((s, x) => s + x, 0) / flexWaardes.length : null;
+  const flexEq = gemFlexWaarde && netPerPl > 0 ? gemFlexWaarde / netPerPl : null;
   const omzetKoers = od.omzetRunRate >= od.doel;
   const winstKoers = gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null && gps.tempo >= gps.restJaar.perMnd;
   const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
@@ -725,6 +730,9 @@ function renderWinstDoelen(root) {
         `1 plaatsing kost jou gemiddeld ${f1(offPerPl)} offers (eigen cijfers)`)}
       ${missieRij('📣', `Voorstellen: ~${f1(voorstPerMnd)} per maand`, voorstPerMnd != null ? '≈ ' + f1(voorstPerMnd / 4.33) + ' per week' : '—',
         `1 offer kost jou gemiddeld ${f1(voorPerOff)} voorstellen — dit is wat het team wekelijks bovenin moet stoppen`)}
+      ${gemFlexWaarde ? `<div style="display:flex;gap:12px;align-items:center;padding:9px 0">
+        <span style="font-size:18px">🟢</span>
+        <div style="flex:1"><b>Flex telt óók — en dubbel</b><br><span class="muted" style="font-size:12px">1 flexkracht die zijn uren afmaakt ≈ <b>${eur(gemFlexWaarde)}</b> marge ≈ <b style="color:var(--green)">${f1(flexEq)} W&S-plaatsingen</b> (nu ${flexActief.length} actief). Zet je er een weg, dan daalt het benodigde W&S-tempo hierboven vanzelf mee zodra de weekmarge stijgt.</span></div></div>` : ''}
       <p class="muted" style="font-size:11px;margin:8px 0 0">Plaatsingen netto gerekend (na ${Math.round((1 - gps.blijf) * 100)}% uitval, gem. fee ${eur(od.gemFee)}); flex-marge (~${eur(gps.flexPm)}/mnd) is al meegeteld. Ratio's komen live uit je eigen conversie-keten.</p>
     </div>
     <details style="margin-top:10px">
