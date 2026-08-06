@@ -30,14 +30,30 @@ function placementStats(p) {
   return { ins, gefact, betaald, open, nog, vervallen, nActief, nGefact, next, status, kleur };
 }
 
+// Is er op het bord al een vervanger aangewezen voor deze plaatsing?
+// De AM legt dat vast op het moment van tekenen (het bord vraagt er dan om);
+// finance leest het hier gewoon af. Bewust deze kant op: de AM's hebben geen
+// schrijfrechten op de fin_*-tabellen, dus het bord kán hier niets neerzetten.
+// Zo hoeft niemand het handmatig in twee systemen bij te houden.
+// (Tjeerd, 6 aug 2026 — na de bijna-dubbeltelling bij Michal Ostrowski.)
+function vervangerVanBord(p) {
+  if (!p.pipeline_candidate_id) return null;
+  return (D.candidates || []).find(c =>
+    String(c.vervangt || '') === String(p.pipeline_candidate_id)) || null;
+}
+
 // garantie: loopt hij nog, en moet er vervangen worden?
 function garantie(p) {
   const start = p.contract_datum;
-  if (!p.garantie_mnd || !start) return { actief: false, tot: null, vervangingNodig: false };
+  if (!p.garantie_mnd || !start) return { actief: false, tot: null, vervangingNodig: false, vervanger: null };
   const tot = addMonths(start, p.garantie_mnd);
   const actief = !p.gestopt_op && todayISO() <= tot;
-  const vervangingNodig = !!p.gestopt_op && p.gestopt_op <= tot && !p.vervangen_door;
-  return { actief, tot, vervangingNodig };
+  const vv = vervangerVanBord(p);
+  // Geleverd = handmatig afgevinkt in finance, óf er staat een vervanger op
+  // het bord. Dat tweede is de normale weg geworden.
+  const geleverd = !!p.vervangen_door || !!vv;
+  const vervangingNodig = !!p.gestopt_op && p.gestopt_op <= tot && !geleverd;
+  return { actief, tot, vervangingNodig, vervanger: vv, vervangenDoor: p.vervangen_door || (vv ? vv.naam : null) };
 }
 
 // welke termijnen zouden moeten vervallen na een stop?

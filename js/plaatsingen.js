@@ -215,8 +215,21 @@ function openPlacementDetail(pid) {
       ${p.gestopt_op ? tag('gestopt ' + fmtD(p.gestopt_op), 'red') : ''}
       ${g.actief ? tag('garantie t/m ' + fmtD(g.tot), 'purple') : ''}
       ${g.vervangingNodig ? tag('VERVANGING LEVEREN', 'red') : ''}
+      ${g.vervangenDoor ? tag('vervangen door ' + g.vervangenDoor, 'green') : ''}
       <span class="muted">${esc(p.functie)} · fee ${eur2(p.fee_excl)} excl. · betaaltermijn ${p.betaaltermijn_dgn} dgn</span>
     </div>
+    ${g.vervanger ? `
+    <div class="panel mb" style="border-left:4px solid var(--green,#7ab648);padding:12px 16px">
+      <b>🔁 Garantievervanging geleverd</b>
+      <div class="muted" style="margin-top:4px">
+        <b>${esc(g.vervanger.naam)}</b>${g.vervanger.functie ? ' · ' + esc(g.vervanger.functie) : ''}
+        ${g.vervanger.geplaatst_op ? ' · gestart ' + fmtD(g.vervanger.geplaatst_op) : ' · nog niet gestart'}
+        ${g.vervanger.fase ? ' · ' + esc(g.vervanger.fase) : ''}
+        — kosteloos, de fee van deze plaatsing is al gefactureerd.
+        ${g.vervanger.gestopt_op ? `<br><b style="color:var(--red)">Let op: ook deze vervanger is gestopt (${fmtD(g.vervanger.gestopt_op)}) — controleer wat je met ${esc(p.klant)} hebt afgesproken.</b>` : ''}
+      </div>
+      <div class="muted" style="margin-top:6px;font-size:12px">Aangewezen op het pijplijnbord bij het tekenen; deze plaatsing blijft gewoon factureerbaar.</div>
+    </div>` : ''}
     <div class="grid cols-4 mb">
       <div class="kpi"><div class="lbl">Gefactureerd</div><div class="val">${eur(st.gefact)}</div></div>
       <div class="kpi good"><div class="lbl">Betaald</div><div class="val">${eur(st.betaald)}</div></div>
