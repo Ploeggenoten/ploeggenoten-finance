@@ -411,6 +411,23 @@ function renderPlaatsingen(root) {
     (!plFilter.klant || p.klant === plFilter.klant) &&
     (plFilter.status === 'alles' || (plFilter.status === 'gestopt' ? p.gestopt_op : !p.gestopt_op)) &&
     (!zoek || (p.kandidaat || '').toLowerCase().includes(zoek) || (p.id || '').toLowerCase().includes(zoek) || (p.klant || '').toLowerCase().includes(zoek)));
+  /* Een geleverde garantievervanger krijgt bewust GEEN eigen fin_placements-rij
+     (geen nieuwe fee — dezelfde plaatsing als het origineel, zie inboxCandidates).
+     Hij moet hier wél te ZIEN zijn, anders lijkt hij nergens te bestaan zodra
+     het origineel als 'gestopt' uit de actief-lopend-filter valt. Daarom een
+     losse, niet-klikbare rij direct na de vervangen plaatsing, zonder
+     fee/factuur-kolommen (die zijn er niet — die staan op het origineel). */
+  const vervangerRij = p => {
+    const v = garantie(p).vervanger;
+    if (!v || plFilter.status === 'gestopt') return '';
+    if (zoek && !(v.naam || '').toLowerCase().includes(zoek) && !(p.klant || '').toLowerCase().includes(zoek)) return '';
+    return `<tr class="vervanger-rij">
+      <td>↳</td><td>${esc(p.klant)}</td>
+      <td>${esc(v.naam)}<br><span class="muted">${esc(v.functie || '')} · vervangt ${esc(p.kandidaat)}</span></td>
+      <td>${v.geplaatst_op ? fmtD(v.geplaatst_op) : '—'}</td>
+      <td class="num">—</td><td>—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+      <td>${tag('vervanger · geen fee', 'blue')}${v.gestopt_op ? ' ' + tag('let op: ook gestopt', 'red') : ''}</td></tr>`;
+  };
   const rows = zichtbaar.slice().sort((a, b) => pNum(b) - pNum(a)).map(p => {
     const st = placementStats(p);
     const g = garantie(p);
@@ -422,8 +439,14 @@ function renderPlaatsingen(root) {
       <td class="num">${eur(st.betaald)}</td>
       <td class="num">${st.open ? `<b style="color:var(--amber)">${eur(st.open)}</b>` : '—'}</td>
       <td class="num">${st.nog ? eur(st.nog) : '—'}</td>
-      <td>${p.concept ? tag('✨ concept', 'amber') + ' ' : ''}${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}</td></tr>`;
+      <td>${p.concept ? tag('✨ concept', 'amber') + ' ' : ''}${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}</td></tr>` + vervangerRij(p);
   }).join('');
+  /* Het origineel kan buiten de actief-lopend-filter vallen (hij IS gestopt)
+     terwijl zijn vervanger wél actief is — dan mist bovenstaande .map() hem.
+     Vang die gevallen apart op, over ALLE plaatsingen van deze klant/zoekopdracht. */
+  const gemisteVervangers = D.placements
+    .filter(p => !zichtbaar.includes(p) && (!plFilter.klant || p.klant === plFilter.klant))
+    .map(vervangerRij).join('');
 
   const klantTabel = klantRows.map(k => `<tr class="clickable ${plFilter.klant === k.klant ? '' : ''}" data-kfilter="${esc(k.klant)}">
     <td>${plFilter.klant === k.klant ? '▸ ' : ''}<b>${esc(k.klant)}</b></td>
@@ -468,7 +491,7 @@ function renderPlaatsingen(root) {
       <p class="muted mt">* Winst-indicatie = netto omzet × je bedrijfsbrede winstmarge (live uit Yuki). Kosten worden niet per klant geregistreerd, dus dit is naar rato.</p></div>
     <div class="panel table-wrap">${plFilter.klant ? `<h2>Plaatsingen · ${esc(plFilter.klant)}</h2>` : ''}<table>
       <tr><th>ID</th><th>Klant</th><th>Kandidaat</th><th>Contract</th><th class="num">Fee excl.</th><th>Stand</th><th class="num">Betaald</th><th class="num">Open</th><th class="num">Nog te fact.</th><th>Status</th></tr>
-      ${rows || '<tr><td colspan="10" class="empty">Geen plaatsingen' + (plFilter.klant ? ' voor deze klant' : '') + '</td></tr>'}</table></div>`;
+      ${rows}${gemisteVervangers}${(rows || gemisteVervangers) ? '' : '<tr><td colspan="10" class="empty">Geen plaatsingen' + (plFilter.klant ? ' voor deze klant' : '') + '</td></tr>'}</table></div>`;
 
   $('#plKlant').onchange = e => { plFilter.klant = e.target.value; rerender(); };
   $('#plStatus').onchange = e => { plFilter.status = e.target.value; rerender(); };

@@ -95,6 +95,7 @@ tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--panel2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table-wrap { overflow-x: auto; }
+tr.vervanger-rij td { font-style: italic; color: var(--muted); background: var(--panel2); }
 tr.dim td { opacity: .45; text-decoration: line-through; }
 /* actiekolom altijd goed leesbaar + niet doorgestreept, ook bij vervallen rijen */
 tr.dim td:last-child { opacity: 1; text-decoration: none; }
