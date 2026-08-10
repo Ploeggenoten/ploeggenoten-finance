@@ -712,13 +712,30 @@ function pipelineForecast() {
 // Bron van waarheid = het bord: kandidaten met geplaatstOp in de maand
 // (W&S + Flex), minus wie deze maand gestopt is (geen garantievervangers).
 // Zo correspondeert de finance-telling 1-op-1 met de teller op het bord.
+// Zelfde garantieregel als het CRM (CRM.binnenGarantie/garantieTot in
+// js/data.js): standaard 2 maanden vanaf start (of geplaatst_op als start
+// ontbreekt), tenzij de kandidaat een eigen garantie_mnd heeft. Stopt hij
+// erna, dan is de fee al verdiend en drukt de stop de target niet meer
+// (Tjeerd, 10 aug 2026, n.a.v. Shifaz Salamat: 4 maanden gelopen, buiten
+// garantie — stond hier tot nu toe tóch als -1 meegeteld).
+const CAND_GARANTIE_STD_MND = 2;
+function candBinnenGarantie(c) {
+  if (!c.gestopt_op) return true;
+  const start = c.start || c.geplaatst_op;
+  if (!start) return true;                 // twijfel mag het cijfer niet gunstiger maken
+  const mnd = Number(c.garantie_mnd) > 0 ? Number(c.garantie_mnd) : CAND_GARANTIE_STD_MND;
+  const tot = addMonths(start, mnd);
+  return c.gestopt_op.slice(0, 10) <= tot;
+}
+
 function boardPlaatsingen(mk) {                             // mk = 'YYYY-MM'
   const grossM = D.candidates.filter(c => (c.geplaatst_op || '').slice(0, 7) === mk);
   const ws = grossM.filter(c => c.type === 'W&S').length;
   const flex = grossM.filter(c => isFlexType(c.type)).length;
   const onb = grossM.length - ws - flex;
   const stopM = D.candidates.filter(c => c.fase === 'Gestopt' &&
-    (c.gestopt_op || '').slice(0, 7) === mk && c.geplaatst_op && !(c.vervangt || '')).length;
+    (c.gestopt_op || '').slice(0, 7) === mk && c.geplaatst_op && !(c.vervangt || '') &&
+    candBinnenGarantie(c)).length;
   return { gross: grossM.length, ws, flex, onb, stopM, netto: grossM.length - stopM };
 }
 
