@@ -56,7 +56,7 @@ function renderFlex(root) {
       <tr><th>Week</th><th class="num">Marge excl. btw</th><th class="num">Flexkrachten</th><th>Notitie</th><th></th></tr>
       ${rows || '<tr><td colspan="5" class="empty">Nog geen weken ingevoerd. Zodra de eerste uitbetaling van Pronkert binnen is: invoeren maar.</td></tr>'}
       </table></div>
-      <p class="muted mt">Deze weken komen uit de margefacturen van Pronkert: de weekroutine leest ze maandag
+      <p class="muted mt">Deze weken komen uit de margefacturen van Pronkert: de weekroutine leest ze zaterdag
         zelf uit de mail, en met 📄 kun je er zelf een inlezen. Bedragen worden telkens opnieuw berekend uit de
         bewaarde factuurregels, dus een factuur twee keer inlezen verandert niets. Alain wordt per 4 weken
         gefactureerd, dus recente weken kunnen tijdelijk lager lijken tot die factuur binnen is. De cashflow
@@ -387,7 +387,7 @@ function openFlexPdfImport() {
     <div class="modal-head"><h2>📄 Margefactuur importeren</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
     <p class="muted mb">Kies de wekelijkse marge-factuur (PDF) van Pronkert. Je ziet eerst wat eruit komt;
       opslaan doe je daarna zelf. Dezelfde factuur twee keer inlezen kan geen kwaad — de cijfers worden
-      opnieuw berekend, niet opgeteld. Normaal doet de weekroutine dit maandag vanzelf.</p>
+      opnieuw berekend, niet opgeteld. Normaal doet de weekroutine dit zaterdagochtend vanzelf.</p>
     <input type="file" id="fxpdfFile" accept=".pdf,application/pdf">
     <div id="fxpdfPrev" class="mt"></div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Sluiten</button>
