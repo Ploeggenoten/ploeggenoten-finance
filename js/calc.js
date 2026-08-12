@@ -212,6 +212,90 @@ function flexStats() {
   const ytd = sum(wk.filter(w => w.week.slice(0, 4) === todayISO().slice(0, 4)));
   return { weken: wk, laatste, avg4, avgPrev4, trendPct, maandRunRate, ytd };
 }
+// ── Wat de margefacturen zeggen (fin_flex_regels) ──────────────
+// Eén flexkracht = één sleutel, ongeacht de bron. NIET op registratienummer:
+// dat staat wél op de PDF-factuur en níét op het Excel-marge-overzicht, waardoor
+// dezelfde persoon in tweeën viel (Sven kwam binnen als 32 u én als 114 u).
+const flexSleutel = r => String(`${r.naam || ''} ${r.roepnaam || ''}`)
+  .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .split(/[^a-z0-9]+/).filter(Boolean).join('-');
+
+// Per week per flexkracht: uren en marge, rechtstreeks uit de factuurregels.
+function flexPerWeekKracht(nWeken = 13) {
+  const weken = new Map(), krachten = new Map();
+  (D.flexRegels || []).forEach(r => {
+    const wk = String(r.week || '').slice(0, 10); if (!wk) return;
+    const sleutel = flexSleutel(r);
+    const naam = (r.roepnaam || r.naam || '?').trim();
+    const w = weken.get(wk) || { week: wk, bedrag: 0, uren: 0, per: new Map() };
+    const cel = w.per.get(sleutel) || { naam, uren: 0, marge: 0 };
+    cel.uren += +r.uren || 0; cel.marge += +r.marge || 0;
+    w.per.set(sleutel, cel);
+    w.bedrag += +r.marge || 0; w.uren += +r.uren || 0;
+    weken.set(wk, w);
+    const k = krachten.get(sleutel) || { sleutel, naam, laatste: '', marge: 0 };
+    k.marge += +r.marge || 0;
+    if (wk > k.laatste) k.laatste = wk;
+    krachten.set(sleutel, k);
+  });
+  const rijen = [...weken.values()].sort((a, b) => b.week.localeCompare(a.week)).slice(0, nWeken);
+  const inBeeld = new Set();
+  rijen.forEach(w => w.per.forEach((v, k) => { if (v.marge || v.uren) inBeeld.add(k); }));
+  const kolommen = [...krachten.values()].filter(k => inBeeld.has(k.sleutel))
+    .sort((a, b) => b.laatste.localeCompare(a.laatste) || b.marge - a.marge);
+  return { rijen, kolommen };
+}
+
+// De opbouw van het uurtarief. De factor op de regel is de INKOOPfactor van
+// Pronkert (uurloon × factor = wat zij ons rekenen); het tarief is wat de klant
+// betaalt. Daaruit volgt de klantfactor, en het verschil is de marge — in factor
+// in plaats van in euro's:
+//     inkooptarief = uurloon × inkoopfactor
+//     klantfactor  = klanttarief ÷ uurloon
+//     margefactor  = klantfactor − inkoopfactor
+//     marge/uur    = margefactor × uurloon
+// Gewogen over de normale uren van de LAATSTE week: overwerk en de reserveringen
+// (eindejaarsuitkering, atv) lopen op een eigen, lagere factor, en een gemiddelde
+// over maanden verstopt een tariefwijziging.
+function flexFactoren() {
+  const per = new Map();
+  (D.flexRegels || []).forEach(r => {
+    const sleutel = flexSleutel(r), wk = String(r.week || '').slice(0, 10);
+    const k = per.get(sleutel) || {
+      sleutel, naam: (r.roepnaam || r.naam || '?').trim(), regnr: r.regnr || '',
+      functie: r.functie || '', klant: r.klant || '',
+      uren: 0, marge: 0, klantomzet: 0, weken: new Map(), laatste: ''
+    };
+    k.uren += +r.uren || 0; k.marge += +r.marge || 0; k.klantomzet += +r.klantbedrag || 0;
+    if (!k.klant && r.klant) k.klant = r.klant;
+    if (!k.regnr && r.regnr) k.regnr = r.regnr;
+    if (String(r.soort || '').trim().toLowerCase() === 'loon normale uren' && +r.uren) {
+      const u = +r.uren;
+      const w = k.weken.get(wk) || { nu: 0, loon: 0, tar: 0, fac: 0 };
+      w.nu += u; w.loon += (+r.uurloon || 0) * u; w.tar += (+r.tarief || 0) * u; w.fac += (+r.factor || 0) * u;
+      k.weken.set(wk, w);
+      if (wk > k.laatste) k.laatste = wk;
+    }
+    per.set(sleutel, k);
+  });
+  return [...per.values()].map(k => {
+    const nw = k.weken.get(k.laatste) || { nu: 0, loon: 0, tar: 0, fac: 0 };
+    const loon = nw.nu ? nw.loon / nw.nu : null;
+    const tar = nw.nu ? nw.tar / nw.nu : null;
+    const fac = nw.nu ? nw.fac / nw.nu : null;
+    const klantfactor = (loon && tar != null) ? tar / loon : null;
+    return {
+      naam: k.naam, regnr: k.regnr, functie: k.functie, klant: k.klant, laatste: k.laatste,
+      uren: k.uren, marge: k.marge, klantomzet: k.klantomzet,
+      uurloon: loon, inkoopfactor: fac || null, klanttarief: tar,
+      inkooptarief: (loon != null && fac) ? loon * fac : null,
+      klantfactor, margefactor: (klantfactor != null && fac) ? klantfactor - fac : null,
+      margePerUur: k.uren ? k.marge / k.uren : null,
+      margePct: k.klantomzet ? k.marge / k.klantomzet : null
+    };
+  }).sort((a, b) => b.laatste.localeCompare(a.laatste) || b.marge - a.marge);
+}
+
 function flexInMaand(mk) {
   return D.flex.filter(w => monthKey(w.week) === mk).reduce((s, w) => s + +w.bedrag, 0);
 }

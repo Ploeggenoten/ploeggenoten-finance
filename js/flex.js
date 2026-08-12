@@ -47,12 +47,20 @@ function renderFlex(root) {
 
     ${flexPlaatsingenPanel()}
 
+    ${flexFactorPanel()}
+
+    ${flexWeekKrachtPanel()}
+
     <div class="panel"><h2>Laatste weken (uitbetaald door Pronkert)</h2>
       <div class="table-wrap"><table>
       <tr><th>Week</th><th class="num">Marge excl. btw</th><th class="num">Flexkrachten</th><th>Notitie</th><th></th></tr>
       ${rows || '<tr><td colspan="5" class="empty">Nog geen weken ingevoerd. Zodra de eerste uitbetaling van Pronkert binnen is: invoeren maar.</td></tr>'}
       </table></div>
-      <p class="muted mt">Import via 📄 vult dit automatisch (excl. btw). Let op: Sven wordt wekelijks gefactureerd, Alain per 4 weken — zijn maandfactuur wordt bij import automatisch over de juiste weken uitgesplitst, dus recente weken kunnen tijdelijk lager lijken tot die factuur binnen is. De cashflow rekent met het gemiddelde van de laatste 4 weken.</p></div>`;
+      <p class="muted mt">Deze weken komen uit de margefacturen van Pronkert: de weekroutine leest ze maandag
+        zelf uit de mail, en met 📄 kun je er zelf een inlezen. Bedragen worden telkens opnieuw berekend uit de
+        bewaarde factuurregels, dus een factuur twee keer inlezen verandert niets. Alain wordt per 4 weken
+        gefactureerd, dus recente weken kunnen tijdelijk lager lijken tot die factuur binnen is. De cashflow
+        rekent met het gemiddelde van de laatste 4 weken.</p></div>`;
 
   $('#fxNieuw').onclick = () => openFlexModal();
   $('#fxPdf').onclick = () => openFlexPdfImport();
@@ -269,35 +277,10 @@ async function pdfTekst(arrayBuffer) {
   return tekst;
 }
 
-function parseMargeFactuur(tekst) {
-  const t = tekst.replace(/\s+/g, ' ');
-  const nr = (t.match(/Factuurnummer:?\s*(\d{4,})/) || [])[1] || null;
-  const wkM = t.match(/Week\s+(\d{1,2})-(\d{4})/);
-  const week = wkM ? maandagVanIsoWeek(+wkM[2], +wkM[1]) : null;
-  // totaal excl. btw staat het betrouwbaarst in de btw-regel: "21,00% BTW over € -800,37"
-  const exM = t.match(/BTW\s+over\s*€?\s*-?\s*([\d.]+,\d{2})/);
-  const bedrag = exM ? Number(exM[1].replace(/\./g, '').replace(',', '.')) : null;
-  // flexkrachten: "S. van Nicolaas (Sven), Reg.nr. 7653911, Logistiek medewerker"
-  const krachten = [];
-  const re = /\(([^)]{1,30})\)\s*,?\s*Reg\.?\s*nr\.?\s*(\d+)\s*,\s*([A-Za-zÀ-ž /-]{2,40}?)(?=\s+Week\b|\s*$)/g;
-  const marks = [];
-  let m;
-  while ((m = re.exec(t))) marks.push({ roepnaam: m[1].trim(), reg: m[2], functie: m[3].trim(), idx: m.index });
-  marks.forEach((mk, i) => {
-    const seg = t.slice(mk.idx, marks[i + 1] ? marks[i + 1].idx : t.length);
-    let uren = 0;
-    const ur = /Loon\s+(?:normale\s+uren|overwerkuren):\s*(\d+):(\d{2})/g;
-    let u; while ((u = ur.exec(seg))) uren += (+u[1]) + (+u[2]) / 60;
-    // volledige naam: stukje vóór de haakjes ("S. van Nicolaas")
-    const voor = t.slice(Math.max(0, mk.idx - 45), mk.idx);
-    const naamM = voor.match(/([A-ZÀ-Ž][\w.]*\.?\s+(?:[a-zà-ž]+\s+)*[A-ZÀ-Ž][\wà-ž-]+)\s*$/);
-    const bestaand = krachten.find(k => k.reg === mk.reg);
-    if (bestaand) bestaand.uren += uren;
-    else krachten.push({ reg: mk.reg, roepnaam: mk.roepnaam, naam: naamM ? naamM[1] : mk.roepnaam, functie: mk.functie, uren: +uren.toFixed(2) });
-  });
-  krachten.forEach(k => { k.uren = +k.uren.toFixed(2); });
-  return { nr, week, bedrag, krachten, geldig: !!(week && bedrag != null) };
-}
+// De oude client-side parser (parseMargeFactuur) is op 10 aug 2026 verwijderd.
+// Het lezen gebeurt nu op één plek: de Edge Function. Twee lezers naast elkaar
+// gaan onherroepelijk uit elkaar lopen, en dan verschilt wat je op het scherm
+// ziet van wat er in de database staat.
 
 // koppel een factuur-flexkracht aan een fin_flex_plaatsingen-rij (roepnaam of achternaam)
 function matchFlexPl(k) {
@@ -309,52 +292,162 @@ function matchFlexPl(k) {
   }) || null;
 }
 
+// ── Wat de margefacturen zeggen ────────────────────────────────
+const uur2 = x => (Math.round((+x || 0) * 100) / 100).toString().replace('.', ',') + ' u';
+const f4 = x => (x == null || !isFinite(x)) ? '—' : Number(x).toFixed(4).replace('.', ',');
+
+function flexFactorPanel() {
+  const lijst = flexFactoren();
+  if (!lijst.length) return '';
+  const inkStd = Number(S('flex_inkoop_factor', 1.8)) || 1.8;
+
+  /* De factuur is leidend: bij elke import worden uurloon, inkoop- en
+     klantfactor op de plaatsing bijgewerkt. Staat er nog een andere factor op,
+     dan rekent de app vooruit met een ander getal dan Pronkert factureert. */
+  const afwijkers = lijst.filter(k => {
+    const pl = matchFlexPl({ naam: k.naam, roepnaam: k.naam });
+    const opPl = pl && pl.inkoop_factor != null ? Number(pl.inkoop_factor) : inkStd;
+    return k.inkoopfactor && Math.abs(k.inkoopfactor - opPl) > 0.005;
+  });
+
+  const rows = lijst.map(k => `<tr>
+    <td><b>${esc(k.naam)}</b><div class="muted">${esc(k.functie || k.klant || '')}${k.regnr ? ' · reg. ' + esc(k.regnr) : ''}</div></td>
+    <td class="num">${eur2(k.uurloon)}</td>
+    <td class="num"><b>${f4(k.inkoopfactor)}×</b><div class="muted">${eur2(k.inkooptarief)}/uur</div></td>
+    <td class="num"><b>${f4(k.klantfactor)}×</b><div class="muted">${eur2(k.klanttarief)}/uur</div></td>
+    <td class="num"><b>${f4(k.margefactor)}×</b></td>
+    <td class="num">${eur2(k.margePerUur)}</td>
+    <td class="num">${k.margePct == null ? '—' : pct(k.margePct)}</td>
+    <td class="num">${uur2(k.uren)}</td>
+    <td class="num"><b>${eur(k.marge)}</b><div class="muted">van ${eur(k.klantomzet)} omzet</div></td></tr>`).join('');
+
+  return `<div class="panel mb"><h2>🔍 Tariefopbouw per flexkracht — van de margefactuur</h2>
+    ${afwijkers.length ? `<div class="tag amber mb">De plaatsing rekent nog met een andere inkoopfactor dan de factuur:
+      ${afwijkers.map(k => `${esc(k.naam)} → Pronkert factureert <b>${f4(k.inkoopfactor)}×</b>`).join(' · ')}.
+      Bij de eerstvolgende import wordt dat gelijkgetrokken — de factuur is leidend.</div>` : ''}
+    <div class="table-wrap"><table>
+      <tr><th>Flexkracht</th><th class="num">Uurloon</th><th class="num">Inkoop Pronkert</th>
+        <th class="num">Klant betaalt</th><th class="num">Marge-factor</th><th class="num">Marge/uur</th>
+        <th class="num">Marge %</th><th class="num">Uren</th><th class="num">Verdiend</th></tr>
+      ${rows}
+    </table></div>
+    <p class="muted mt">Inkoop = uurloon × factor van Pronkert. Klant betaalt = het tarief op dezelfde regel.
+      Marge-factor = klantfactor − inkoopfactor; × het uurloon geeft de marge per uur. Factoren komen uit de
+      laatste week met normale uren — overwerk en eindejaarsuitkering/atv lopen op een eigen factor, maar
+      tellen wel mee in het bedrag en het percentage.</p></div>`;
+}
+
+function flexWeekKrachtPanel() {
+  const pwk = flexPerWeekKracht(13);
+  if (!pwk.rijen.length) return '';
+  const cel = c => c ? `<b>${eur(c.marge)}</b><div class="muted">${uur2(c.uren)}</div>` : '<span class="muted">—</span>';
+  const somK = s => pwk.rijen.reduce((a, w) => {
+    const c = w.per.get(s); return { m: a.m + (c ? c.marge : 0), u: a.u + (c ? c.uren : 0) };
+  }, { m: 0, u: 0 });
+  return `<div class="panel mb"><h2>📅 Per week en per persoon</h2>
+    <div class="table-wrap"><table>
+      <tr><th>Week</th>${pwk.kolommen.map(k => `<th class="num">${esc(k.naam)}</th>`).join('')}
+        <th class="num">Totaal</th><th class="num">Uren</th></tr>
+      ${pwk.rijen.map(w => `<tr><td><b>${fmtD(w.week)}</b></td>
+        ${pwk.kolommen.map(k => `<td class="num">${cel(w.per.get(k.sleutel))}</td>`).join('')}
+        <td class="num"><b>${eur(w.bedrag)}</b></td>
+        <td class="num">${uur2(w.uren)}</td></tr>`).join('')}
+      <tr><td><b>Totaal ${pwk.rijen.length} ${pwk.rijen.length === 1 ? 'week' : 'weken'}</b></td>
+        ${pwk.kolommen.map(k => { const s = somK(k.sleutel);
+          return `<td class="num"><b>${eur(s.m)}</b><div class="muted">${uur2(s.u)}</div></td>`; }).join('')}
+        <td class="num"><b>${eur(pwk.rijen.reduce((a, w) => a + w.bedrag, 0))}</b></td>
+        <td class="num">${uur2(pwk.rijen.reduce((a, w) => a + w.uren, 0))}</td></tr>
+    </table></div>
+    <p class="muted mt">Rechtstreeks uit de margefacturen van Pronkert. Uren zijn gewerkte uren —
+      eindejaarsuitkering en atv leveren wel marge op, maar geen uren.</p></div>`;
+}
+
+// De Edge Function die het schrijfwerk doet. Heet in Supabase `dynamic-worker`
+// (naam die het dashboard zelf verzon bij deploy-via-editor); de code staat in
+// het CRM onder supabase/functions/pronkert-marge/.
+async function margeFunctie(body) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('geen actieve sessie — log opnieuw in');
+  const r = await fetch(SUPABASE_URL + '/functions/v1/dynamic-worker', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+    body: JSON.stringify(body)
+  });
+  const uit = await r.json().catch(() => ({}));
+  if (r.status === 404 || r.status === 503) throw Object.assign(new Error('nog niet gedeployed'), { setup: true });
+  if (!r.ok) {
+    const reden = typeof uit.error === 'string' ? uit.error : (uit.error && uit.error.message) || '';
+    throw new Error(reden || ('de functie gaf status ' + r.status));
+  }
+  return uit;
+}
+
 function openFlexPdfImport() {
   openModal(`
     <div class="modal-head"><h2>📄 Margefactuur importeren</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
-    <p class="muted mb">Sleep of kies de wekelijkse marge-factuur (PDF) van Pronkert. De week, het bedrag en de gewerkte uren per flexkracht worden automatisch herkend.</p>
+    <p class="muted mb">Kies de wekelijkse marge-factuur (PDF) van Pronkert. Je ziet eerst wat eruit komt;
+      opslaan doe je daarna zelf. Dezelfde factuur twee keer inlezen kan geen kwaad — de cijfers worden
+      opnieuw berekend, niet opgeteld. Normaal doet de weekroutine dit maandag vanzelf.</p>
     <input type="file" id="fxpdfFile" accept=".pdf,application/pdf">
     <div id="fxpdfPrev" class="mt"></div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Sluiten</button>
     <button class="btn primary" id="fxpdfGo" disabled>Importeren</button></div>`);
-  let parsed = null;
+  let tekst = null;
+  /* De tekstlaag van de PDF gaat naar de Edge Function; die leest hem én doet
+     het schrijfwerk. Zo kan dit scherm nooit iets anders tonen dan wat er wordt
+     opgeslagen, en telt niets dubbel: weekbedrag, gewerkte uren en verdiende
+     marge worden afgeleid uit de bewaarde factuurregels, nooit opgeteld bij een
+     vorige stand. (Vóór 10 aug 2026 telde deze knop uren erbij op — dat botst
+     met de nieuwe berekening en is daarom weg.) */
+  const melding = (kl, t) => { $('#fxpdfPrev').innerHTML = `<div class="tag ${kl}">${esc(t)}</div>`; };
+  const nietGedeployed = () => melding('amber',
+    'De functie dynamic-worker staat niet in Supabase. Zie SETUP-PRONKERT.md in het CRM.');
+
   $('#fxpdfFile').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     $('#fxpdfPrev').innerHTML = '<span class="muted">Lezen…</span>';
+    $('#fxpdfGo').disabled = true;
     try {
-      parsed = parseMargeFactuur(await pdfTekst(await f.arrayBuffer()));
-    } catch (err) { $('#fxpdfPrev').innerHTML = `<div class="tag red">Lezen mislukt: ${esc(err.message)}</div>`; return; }
-    if (!parsed.geldig) { $('#fxpdfPrev').innerHTML = '<div class="tag red">Kon week of bedrag niet vinden — is dit de marge-factuur van Pronkert?</div>'; return; }
-    const bestaand = D.flex.find(w => w.week === parsed.week);
-    const alGedaan = bestaand && (bestaand.note || '').includes(parsed.nr || '§');
-    $('#fxpdfPrev').innerHTML = `
-      <div class="pot"><span>Week</span><b>${fmtD(parsed.week)} (ma)</b></div>
-      <div class="pot"><span>Marge excl. btw</span><b>${eur2(parsed.bedrag)}</b></div>
-      <div class="pot"><span>Factuurnummer</span><b>${esc(parsed.nr || '—')}</b></div>
-      <div class="pot"><span>Flexkrachten</span><b>${parsed.krachten.length}</b></div>
-      ${parsed.krachten.map(k => { const f = matchFlexPl(k); return `<div class="pot"><span>· ${esc(k.naam)} (${esc(k.roepnaam)}) — ${k.uren} uur</span><b>${f ? '→ ' + esc(f.kandidaat) : '<span class="muted">geen koppeling</span>'}</b></div>`; }).join('')}
-      ${parsed.krachten.some(k => matchFlexPl(k)) ? `<label class="mt" style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px"><input type="checkbox" id="fxpdfUren" checked style="width:auto"> Gewerkte uren bijtellen bij de gekoppelde flexkrachten (overname-teller)</label>` : ''}
-      ${alGedaan ? '<div class="tag amber mt">⚠ Deze factuur is al geïmporteerd — nogmaals importeren overschrijft alleen het weekbedrag (uren tellen niet dubbel).</div>'
-        : bestaand ? '<div class="tag amber mt">Er staat al een bedrag voor deze week — dat wordt overschreven.</div>' : ''}`;
-    $('#fxpdfGo').disabled = false;
-  };
-  $('#fxpdfGo').onclick = async () => {
-    if (!parsed || !parsed.geldig) return;
-    const bestaand = D.flex.find(w => w.week === parsed.week);
-    const alGedaan = bestaand && (bestaand.note || '').includes(parsed.nr || '§');
-    const row = { week: parsed.week, bedrag: parsed.bedrag, flexkrachten: parsed.krachten.length, note: `PDF factuur ${parsed.nr || '?'}` };
-    await dbWrite('fin_flex_weken', t => t.upsert(row, { onConflict: 'week' }));
-    await reload('fin_flex_weken', 'flex', 'week');
-    // uren bijtellen (alleen bij eerste import van deze factuur, tegen dubbeltellen)
-    const doUren = $('#fxpdfUren') && $('#fxpdfUren').checked && !alGedaan;
-    let nUren = 0;
-    if (doUren) for (const k of parsed.krachten) {
-      const f = matchFlexPl(k); if (!f || !k.uren) continue;
-      await dbWrite('fin_flex_plaatsingen', t => t.update({ gewerkte_uren: (Number(f.gewerkte_uren) || 0) + k.uren }).eq('id', f.id));
-      nUren++;
+      tekst = await pdfTekst(await f.arrayBuffer());
+    } catch (err) { melding('red', 'PDF lezen mislukt: ' + err.message); return; }
+    try {
+      const uit = await margeFunctie({ tekst, droog: true });
+      if (uit.waarschuwing) { tekst = null; return melding('red', uit.waarschuwing); }
+      const weken = uit.weken || [];
+      if (!weken.length) { tekst = null; return melding('red', 'Geen factuurregels herkend — is dit de margefactuur van Pronkert?'); }
+      $('#fxpdfPrev').innerHTML = `
+        <div class="pot"><span>Factuur</span><b>${esc(uit.factuur || '—')}${uit.factuurdatum ? ' · ' + fmtD(uit.factuurdatum) : ''}</b></div>
+        <div class="pot"><span>Totaal marge excl. btw</span><b>${eur2(uit.totaal)}</b></div>
+        <div class="pot"><span>Regels</span><b>${uit.aantal_regels || 0}</b></div>
+        ${weken.map(w => `<div class="mt"><b>Week ${esc(String(w.weeknr))}</b> <span class="muted">(ma ${fmtD(w.week)})</span>
+          — <b>${eur2(w.bedrag)}</b> <span class="muted">over ${uur2(w.uren)}ur</span>
+          ${(w.krachten || []).map(k => `<div class="pot"><span>· ${esc(k.roepnaam || k.naam)} — ${uur2(k.uren)}ur</span>
+            <b>${eur2(k.marge)}${k.marge_per_uur != null ? ` <span class="muted">(${eur2(k.marge_per_uur)}/uur · inkoop ${f4(k.inkoopfactor)}× · klant ${f4(k.klantfactor)}×)</span>` : ''}</b></div>`).join('')}
+        </div>`).join('')}
+        <p class="muted mt">De optelling van de regels komt exact uit op het factuurtotaal.</p>`;
+      $('#fxpdfGo').disabled = false;
+    } catch (err) {
+      tekst = null;
+      if (err.setup) nietGedeployed(); else melding('red', 'Lezen mislukt: ' + err.message);
     }
-    if (nUren) await reload('fin_flex_plaatsingen', 'flexPl', 'id');
-    closeModal(); toast(`Week ${fmtD(parsed.week)} geïmporteerd ✓ (${eur(parsed.bedrag)}${nUren ? ` · uren bijgewerkt voor ${nUren} flexkracht${nUren === 1 ? '' : 'en'}` : ''})`);
-    rerender();
+  };
+
+  $('#fxpdfGo').onclick = async () => {
+    if (!tekst) return;
+    $('#fxpdfGo').disabled = true;
+    try {
+      const uit = await margeFunctie({ tekst });
+      if (uit.waarschuwing) { $('#fxpdfGo').disabled = false; return melding('red', uit.waarschuwing); }
+      await reload('fin_flex_weken', 'flex', 'week');
+      await reload('fin_flex_plaatsingen', 'flexPl', 'id');
+      await reload('fin_flex_regels', 'flexRegels', 'week');
+      const n = (uit.weken || []).length, onb = (uit.onbekend || []).length;
+      closeModal();
+      toast(`${n} ${n === 1 ? 'week' : 'weken'} bijgewerkt ✓${onb ? ` · ${onb} flexkracht${onb === 1 ? '' : 'en'} nog niet gekoppeld` : ''}`);
+      rerender();
+    } catch (err) {
+      $('#fxpdfGo').disabled = false;
+      if (err.setup) nietGedeployed(); else toast('Importeren mislukt: ' + err.message, true);
+    }
   };
 }
