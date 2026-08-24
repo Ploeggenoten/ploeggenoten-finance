@@ -1002,14 +1002,19 @@ function actueelVoorMaand(mk) {
   return rows.length ? rows.reduce((s, a) => s + +a.bedrag, 0) : null;
 }
 
-// factuur verdween uit Yuki's open posten → automatisch op "betaald"
-// Veiligheid: alleen als Yuki daadwerkelijk open posten teruggaf (anders is "leeg" dubbelzinnig)
-// en de termijn minstens 5 dagen geleden is gefactureerd.
-async function yukiBetaaldSync() {
-  const debOpen = D.yukiOpen.filter(r => r.soort === 'debiteur');
-  if (!S('yuki_synced_at') || !debOpen.length) return 0;
+// factuur verdween uit Yuki's open posten → LIJKT betaald.
+// Schrijft NIETS weg (dat deed 'm eerder automatisch — Tjeerd zag daardoor
+// termijnen naar "betaald" springen die hij nooit had bevestigd, 24 aug 2026).
+// Geeft alleen de Set met termijn-id's terug waar Yuki geen open post meer
+// voor toont; de UI (Plaatsingen) toont dit als suggestie, Tjeerd bevestigt
+// zelf met een klik — pas dán wordt er geschreven (zie markeerInstallment).
+// Veiligheid: alleen als Yuki daadwerkelijk open posten teruggaf (anders is
+// "leeg" dubbelzinnig) en de termijn minstens 5 dagen geleden is gefactureerd.
+function yukiBetaaldSuggesties() {
+  const debOpen = (D.yukiOpen || []).filter(r => r.soort === 'debiteur');
+  const set = new Set();
+  if (!S('yuki_synced_at') || !debOpen.length) return set;
   const btw = 1 + Number(S('btw_pct', .21));
-  let n = 0;
   for (const p of D.placements) {
     if (p.concept) continue;
     const voornaam = (p.kandidaat || '').toLowerCase().split(' ')[0];
@@ -1026,14 +1031,19 @@ async function yukiBetaaldSync() {
         if (naamHit && tm) return Number(tm[1]) === i.termijn_nr;   // exacte termijn nog open
         return naamHit && bedragHit;
       });
-      if (!nogOpen) {
-        await dbWrite('fin_installments', t => t.update({ status: 'betaald', betaaldatum: S('yuki_synced_at', todayISO()).slice(0, 10) }).eq('id', i.id));
-        n++;
-      }
+      if (!nogOpen) set.add(i.id);
     }
   }
-  if (n) await reload('fin_installments', 'installments', 'geplande_datum');
-  return n;
+  return set;
+}
+
+// dezelfde suggesties, verrijkt met de plaatsing — voor de suggestielijst in Plaatsingen
+function yukiBetaaldSuggestieRijen() {
+  const set = D.yukiBetaaldSuggesties || new Set();
+  if (!set.size) return [];
+  return D.placements.flatMap(p => instOf(p.id)
+    .filter(i => i.status === 'gefactureerd' && set.has(i.id))
+    .map(i => ({ p, i })));
 }
 
 // Yuki toont een verstuurde factuur → zet de bijbehorende termijn automatisch op "gefactureerd"

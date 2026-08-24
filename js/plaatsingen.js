@@ -189,10 +189,12 @@ function openPlacementDetail(pid) {
   const rows = st.ins.map(i => {
     const vv = vervaldatum(i, p);
     const late = i.status === 'gefactureerd' && vv && vv < todayISO() ? daysBetween(vv, todayISO()) : 0;
-    const stTag = { te_factureren: tag('te factureren', 'amber'), gefactureerd: late ? tag(late + ' dgn te laat', 'red') : tag('gefactureerd', 'blue'), betaald: tag('betaald', 'green'), vervallen: tag('vervallen', 'gray') }[i.status];
+    const yukiBetaald = i.status === 'gefactureerd' && (D.yukiBetaaldSuggesties || new Set()).has(i.id);
+    const stTag = { te_factureren: tag('te factureren', 'amber'), gefactureerd: late ? tag(late + ' dgn te laat', 'red') : tag('gefactureerd', 'blue'), betaald: tag('betaald', 'green'), vervallen: tag('vervallen', 'gray') }[i.status]
+      + (yukiBetaald ? ' ' + tag('💰 Yuki: niet meer open', 'green') : '');
     const acts = [];
     if (i.status === 'te_factureren') acts.push(`<button class="btn small" data-iact="fact" data-iid="${i.id}">Gefactureerd ✓</button>`);
-    if (i.status === 'gefactureerd') acts.push(`<button class="btn small" data-iact="paid" data-iid="${i.id}">Betaald ✓</button>`);
+    if (i.status === 'gefactureerd') acts.push(`<button class="btn small ${yukiBetaald ? 'primary' : ''}" data-iact="paid" data-iid="${i.id}" title="${yukiBetaald ? 'Yuki toont deze factuur niet meer als open post — waarschijnlijk overgemaakt' : 'Handmatig bevestigen — Yuki toont hem nog als open, of er is nog geen match gevonden'}">Betaald ✓${yukiBetaald ? ' 💰' : ''}</button>`);
     if (i.status === 'vervallen') {
       acts.push(`<button class="btn small" data-iact="herstel" data-iid="${i.id}" title="Terugzetten naar te factureren">↺ herstel</button>`);
       acts.push(`<button class="btn small ghost" data-iact="del" data-iid="${i.id}" title="Termijn verwijderen">🗑</button>`);
@@ -422,6 +424,18 @@ let plFilter = { klant: '', status: 'actief', naam: '' };
 function renderPlaatsingen(root) {
   const inbox = inboxCandidates();
   const klantRows = perKlantStats();
+  const betaalSuggesties = yukiBetaaldSuggestieRijen();
+  const btw = 1 + Number(S('btw_pct', .21));
+  const betaalSuggestiesHtml = betaalSuggesties.length ? `
+    <div class="panel mb" style="border-left:4px solid var(--green,#7ab648)">
+      <h2>💰 Yuki: mogelijk betaald — ${betaalSuggesties.length} factuur${betaalSuggesties.length === 1 ? '' : 'en'}</h2>
+      <p class="muted" style="margin:2px 0 8px">Deze staan niet meer als open post in Yuki. Klik "Betaald ✓" pas als je 'm zelf ziet — de app zet 'm nooit vanzelf op betaald.</p>
+      ${betaalSuggesties.map(({ p, i }) => `<div class="actie">
+        <div class="ico">💰</div>
+        <div class="body"><b>${esc(p.kandidaat)} · ${esc(p.klant)}</b>
+        <span>Termijn ${i.termijn_nr} · ${eur2(i.bedrag_excl * btw)} incl. btw · gefactureerd ${fmtD(i.factuurdatum)}</span></div>
+        <button class="btn small primary" data-sug-paid="${i.id}">Betaald ✓</button></div>`).join('')}
+    </div>` : '';
   const inboxHtml = inbox.length ? `
     <div class="panel mb"><h2>📥 Vanuit het pijplijnbord — plaatsing afronden</h2>
     ${inbox.map(c => `<div class="actie warn"><div class="ico">👤</div>
@@ -466,7 +480,7 @@ function renderPlaatsingen(root) {
       <td class="num">${eur(st.betaald)}</td>
       <td class="num">${st.open ? `<b style="color:var(--amber)">${eur(st.open)}</b>` : '—'}</td>
       <td class="num">${st.nog ? eur(st.nog) : '—'}</td>
-      <td>${p.concept ? tag('✨ concept', 'amber') + ' ' : ''}${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}</td></tr>` + vervangerRij(p);
+      <td>${p.concept ? tag('✨ concept', 'amber') + ' ' : ''}${tag(st.status, st.kleur)}${g.vervangingNodig ? ' ' + tag('vervangen!', 'red') : g.actief ? ' ' + tag('garantie', 'purple') : ''}${st.ins.some(i => i.status === 'gefactureerd' && (D.yukiBetaaldSuggesties || new Set()).has(i.id)) ? ' ' + tag('💰 Yuki: mogelijk betaald', 'green') : ''}</td></tr>` + vervangerRij(p);
   }).join('');
   /* Het origineel kan buiten de actief-lopend-filter vallen (hij IS gestopt)
      terwijl zijn vervanger wél actief is — dan mist bovenstaande .map() hem.
@@ -508,6 +522,7 @@ function renderPlaatsingen(root) {
         </select>
         <button class="btn primary" id="plNieuw">+ Nieuwe plaatsing</button>
       </div></div>
+    ${betaalSuggestiesHtml}
     ${inboxHtml}
     <div class="panel mb"><h2>🏢 Per klant <span class="muted">— klik op een klant om te filteren</span></h2>
       <div class="table-wrap"><table>
@@ -538,6 +553,12 @@ function renderPlaatsingen(root) {
       await dbWrite('fin_dismissed_candidates', t => t.upsert({ candidate_id: dis.dataset.dismiss }));
       await reload('fin_dismissed_candidates', 'dismissed', 'candidate_id');
       return rerender();
+    }
+    const sug = e.target.closest('[data-sug-paid]');
+    if (sug) {
+      const inst = D.installments.find(i => i.id === Number(sug.dataset.sugPaid));
+      if (inst) await markeerInstallment(inst, 'betaald');
+      return;
     }
     const tr = e.target.closest('tr[data-pid]');
     if (tr) openPlacementDetail(tr.dataset.pid);

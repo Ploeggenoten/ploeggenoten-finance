@@ -5,6 +5,7 @@ const D = {            // alle data, geladen in loadAll()
   placements: [], installments: [], budget: [], actuals: [],
   saldi: [], tx: [], loans: [], loanPayments: [], settings: {},
   dismissed: [], candidates: [], clients: [], flex: [], targets: [], tarieven: [], yukiOpen: [], flexPl: [], flexAfspr: [], flexRegels: [],
+  yukiBetaaldSuggesties: new Set(),   // termijn-id's die Yuki niet meer als open post toont — suggestie, geen auto-schrijf
 };
 
 const $ = s => document.querySelector(s);
@@ -96,6 +97,7 @@ async function loadAll() {
   D.candidates = cand.error ? [] : cand.data;   // pijplijn kan onbereikbaar zijn — app blijft werken
   D.clients = cli.error ? [] : cli.data;
   D.targets = tgt.error ? [] : tgt.data;        // plaatsings-targets van het bord ({maand:'2026-07', aantal})
+  D.yukiBetaaldSuggesties = yukiBetaaldSuggesties();   // op basis van de laatst geladen Yuki-open-posten
 }
 
 async function saveSetting(key, value) {
