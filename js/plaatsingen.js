@@ -367,6 +367,16 @@ function openPlacementDetail(pid) {
 }
 
 function openInstallmentEdit(inst, pid) {
+  /* Latere, nog open termijnen kunnen meeschuiven als deze datum wijzigt:
+     een gespreid schema (bv. 7× maandelijks) is ten opzichte van de eerste
+     factuur gepland. Stond het schema op de contractdatum en hoort het op
+     de eerste werkdag (Tjeerd, 25 aug 2026: Torin bij Rijnbeek — eerste
+     factuur naar 24 sep, de andere zes automatisch een maand mee), dan is
+     dat nu één wijziging in plaats van zeven. Alleen open termijnen ná
+     deze schuiven mee — wat al gefactureerd of betaald is, is geschiedenis. */
+  const latere = (D.installments || []).filter(i => i.placement_id === pid
+    && i.termijn_nr > inst.termijn_nr && i.status === 'te_factureren')
+    .sort((a, b) => a.termijn_nr - b.termijn_nr);
   openModal(`
     <div class="modal-head"><h2>Termijn ${inst.termijn_nr} bewerken</h2><button class="btn ghost small" onclick="closeModal()">✕</button></div>
     <div class="form-grid">
@@ -377,13 +387,30 @@ function openInstallmentEdit(inst, pid) {
       <div><label>Factuurdatum</label><input id="ie_fact" type="date" value="${esc(inst.factuurdatum || '')}"></div>
       <div><label>Betaaldatum</label><input id="ie_paid" type="date" value="${esc(inst.betaaldatum || '')}"></div>
     </div>
+    ${latere.length ? `<label class="chk" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px">
+      <input type="checkbox" id="ie_schuif" checked style="margin-top:3px">
+      <span>De ${latere.length} latere open termijn${latere.length === 1 ? '' : 'en'} laten meeschuiven —
+        maandelijks door vanaf deze datum (termijn ${latere.map(i => i.termijn_nr).join(', ')}).
+        Gefactureerde of betaalde termijnen blijven staan.</span></label>` : ''}
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
     <button class="btn primary" id="ie_save">Opslaan</button></div>`, { narrow: true });
   $('#ie_save').onclick = async () => {
+    const nieuweDatum = $('#ie_datum').value || null;
     await dbWrite('fin_installments', t => t.update({
-      bedrag_excl: Number($('#ie_bedrag').value || 0), geplande_datum: $('#ie_datum').value || null,
+      bedrag_excl: Number($('#ie_bedrag').value || 0), geplande_datum: nieuweDatum,
       status: $('#ie_status').value, factuurdatum: $('#ie_fact').value || null, betaaldatum: $('#ie_paid').value || null,
     }).eq('id', inst.id));
+    const schuif = $('#ie_schuif');
+    if (schuif && schuif.checked && nieuweDatum && nieuweDatum !== inst.geplande_datum) {
+      /* Elke latere open termijn: nieuwe datum + één maand per stap ná
+         deze termijn — ook als het oude schema gaten of scheve datums
+         had, staat alles daarna weer strak maandelijks. */
+      for (const i of latere)
+        await dbWrite('fin_installments', t => t.update({
+          geplande_datum: addMonths(nieuweDatum, i.termijn_nr - inst.termijn_nr),
+        }).eq('id', i.id));
+      toast(`${latere.length} termijn${latere.length === 1 ? '' : 'en'} meegeschoven`);
+    }
     await reload('fin_installments', 'installments', 'geplande_datum');
     closeModal(); openPlacementDetail(pid); rerender();
   };
