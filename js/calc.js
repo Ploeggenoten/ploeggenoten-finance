@@ -571,6 +571,51 @@ function breakEven() {
   return { kostPm, flexPm, perPlaatsing, gemFee, behoud, nodig };
 }
 
+// ── plaatsingswaarden: streefpunt vs echte cijfers, W&S én flex ──
+// Streefpunt (Tjeerd, 25 aug '26): W&S ≈ €9.000 fee, flex ≈ €12.000 marge per
+// plaatsing, excl. btw. "Echt" komt live uit de eigen cijfers; "netto" is de
+// verwachtingswaarde per gestárte plaatsing, dus inclusief stoppers.
+function plaatsingsWaarden() {
+  const k = kpis();
+  const wsStreef = Number(S('streef_fee_ws', 9000));
+  const flexStreef = Number(S('streef_waarde_flex', 12000));
+  const wsBlijf = 1 - (k.stopPct || 0);
+  const wsEcht = k.gemFee || wsStreef;
+  const fp = (D.flexPl || []).filter(f => !f.concept);
+  const gestopt = fp.filter(f => f.gestopt_op);
+  const pot = fp.map(f => flexPlBerekening(f).overnameWaarde).filter(Boolean);
+  const flexEcht = pot.length ? pot.reduce((s, x) => s + x, 0) / pot.length : flexStreef;
+  const flexBlijf = fp.length ? 1 - gestopt.length / fp.length : wsBlijf;
+  const stopW = gestopt.map(f => flexPlBerekening(f).verdiend).filter(v => v != null);
+  const flexBijStop = stopW.length ? stopW.reduce((s, x) => s + x, 0) / stopW.length : 0;
+  const nettoFlex = w => flexBlijf * w + (1 - flexBlijf) * flexBijStop;
+  return {
+    ws: { streef: wsStreef, echt: wsEcht, blijf: wsBlijf,
+      nettoStreef: wsStreef * wsBlijf, nettoEcht: wsEcht * wsBlijf },
+    flex: { streef: flexStreef, echt: flexEcht, blijf: flexBlijf, bijStop: flexBijStop,
+      nettoStreef: nettoFlex(flexStreef), nettoEcht: nettoFlex(flexEcht),
+      n: fp.length, nGestopt: gestopt.length },
+  };
+}
+
+// ── break-even & winstdoel als mix van W&S + flex-plaatsingen ────
+// Bruto = streefwaarden alsof niemand stopt; netto = echte cijfers incl. uitval.
+// Een flex-plaatsing telt hier als waarde over het hele traject (de kas komt per
+// week binnen — dat bewaakt de 13-weken cashflow). De runrate van AL LOPENDE
+// flexkrachten wordt hier niet afgetrokken: het flex-doel gaat over nieuwe krachten.
+function breakEvenMix(flexDoelPm = null) {
+  const w = plaatsingsWaarden();
+  const fd = flexDoelPm != null ? flexDoelPm : Math.max(0, Number(S('flex_doel_pm', 1)));
+  const kostPm = breakEven().kostPm;
+  const winstPm = (Number(S('doel_winst_jaar', 0)) || 0) / 12;
+  const mix = nodigPm => ({
+    waardePm: nodigPm,
+    brutoWs: w.ws.streef > 0 ? Math.max(0, nodigPm - fd * w.flex.streef) / w.ws.streef : null,
+    nettoWs: w.ws.nettoEcht > 0 ? Math.max(0, nodigPm - fd * w.flex.nettoEcht) / w.ws.nettoEcht : null,
+  });
+  return { w, flexDoel: fd, kostPm, breakeven: mix(kostPm), winstdoel: mix(kostPm + winstPm) };
+}
+
 // ── conversie-keten: voorstel → offer → plaatsing → blijver ─────
 // Gebaseerd op afgeronde trajecten (bord): hoeveel heb je er van elk nodig?
 function conversieKeten(filter = {}) {

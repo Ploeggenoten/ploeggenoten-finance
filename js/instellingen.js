@@ -13,6 +13,9 @@ function renderInstellingen(root) {
     { key: 'stop_achterstand_mnd', lbl: 'Termijnen behouden na stop (maanden)', type: 'int' },
     { key: 'scenario_omzet_pm', lbl: 'Standaard scenario: nieuwe omzet p/m (excl. btw)', type: 'eur' },
     { key: 'target_omzet_pm', lbl: 'Omzet-target per maand (leeg = geen)', type: 'eur' },
+    { key: 'streef_fee_ws', lbl: 'Streefwaarde W&S-plaatsing (fee excl. btw, standaard 9.000)', type: 'eur' },
+    { key: 'streef_waarde_flex', lbl: 'Streefwaarde flex-plaatsing (marge t/m overname, standaard 12.000)', type: 'eur' },
+    { key: 'flex_doel_pm', lbl: 'Flex-doel: nieuwe flexkrachten per maand', type: 'int' },
   ];
   const rows = velden.map(v => {
     const val = S(v.key);

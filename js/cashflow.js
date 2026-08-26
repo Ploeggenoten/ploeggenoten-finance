@@ -349,7 +349,7 @@ function cfDynHtml(sc) {
       ? `<div class="pot"><span>📍 Nog <b>${left}</b> plaatsing${left === 1 ? '' : 'en'} te gaan deze maand. Haal je die niet, dan mis je ~<b>${eur(left * gemFee)}</b> omzet — zichtbaar in je cash rond <b>${cashMaand2}</b>.</span></div>`
       : `<div class="pot"><span>✓ Target deze maand gehaald: <b>${bp.netto}/${tgt}</b> netto plaatsingen (gelijk aan het bord).</span></div>`}
       <div class="pot"><span>🔄 Blijfkans <b>${Math.round(behoud * 100)}%</b> (historisch: ${D.placements.filter(p => p.gestopt_op).length} van ${D.placements.length} plaatsingen gestopt). Van elke <b>${tgt}</b> plaatsingen reken ik op ~<b>${(tgt * behoud).toFixed(1)}</b> die blijven. ${uitlegChip('blijfkans')}</span></div>
-      ${be.nodig != null ? `<div class="pot"><span>⚖️ Break-even: ~<b>${be.nodig.toFixed(1)}</b> plaatsing${be.nodig >= 1.5 || be.nodig < 1 ? 'en' : ''}/mnd dekken je kosten (${eur(be.kostPm)}/mnd − flex ${eur(be.flexPm)}). Boven je target van <b>${tgt}</b> hou je ~<b>${eur(Math.max(0, tgt - be.nodig) * be.perPlaatsing)}</b> netto over per maand. ${uitlegChip('breakeven')}</span></div>` : ''}</div>`;
+      ${be.nodig != null ? `<div class="pot"><span>⚖️ Break-even: ~<b>${be.nodig.toFixed(1)}</b> plaatsing${be.nodig >= 1.5 || be.nodig < 1 ? 'en' : ''}/mnd dekken je kosten (${eur(be.kostPm)}/mnd − flex ${eur(be.flexPm)}). Boven je target van <b>${tgt}</b> hou je ~<b>${eur(Math.max(0, tgt - be.nodig) * be.perPlaatsing)}</b> netto over per maand. Elke nieuwe flexkracht die blijft zitten vervangt ~<b>${(plaatsingsWaarden().flex.nettoEcht / be.perPlaatsing).toFixed(1)}</b> W&S-plaatsing. ${uitlegChip('breakeven')}</span></div>` : ''}</div>`;
 
   const chart = lineChart(proj.rows.map(r => r.label), [
     { label: 'Banksaldo (huidig scenario)', color: 'var(--accent)', values: proj.rows.map(r => r.saldo) },
@@ -663,17 +663,21 @@ function renderWinstDoelen(root) {
   const plNodig = Math.max(plOmzet ?? 0, plWinst ?? 0);
   const leidend = (plOmzet ?? 0) >= (plWinst ?? 0) ? 'omzetdoel' : 'winstdoel';
   const plPerMnd = mndRest > 0 ? plNodig / mndRest : null;
-  const tekortTempo = plPerMnd != null ? plPerMnd - gps.tempo : null;
-  // vertaling naar activiteiten via je eigen conversie-keten
+  // ── mix W&S + flex (streefpunt 25 aug '26: W&S ±€9k fee, flex ±€12k marge) ──
+  // euro-behoefte per maand (netto) → verdeeld over een flex-doel + rest W&S
+  const pw = plaatsingsWaarden();
+  const fdDoel = Math.max(0, Number(S('flex_doel_pm', 1)));
+  const flexActief = (D.flexPl || []).filter(f => !f.gestopt_op && !f.concept);
+  const waardePm = plPerMnd != null ? plPerMnd * netPerPl : null;      // nodig in netto euro's/mnd
+  const wsPerMnd = waardePm != null && pw.ws.nettoEcht > 0 ? Math.max(0, waardePm - fdDoel * pw.flex.nettoEcht) / pw.ws.nettoEcht : plPerMnd;
+  const wsPerMndBruto = waardePm != null && pw.ws.streef > 0 ? Math.max(0, waardePm - fdDoel * pw.flex.streef) / pw.ws.streef : null;
+  const totPerMnd = wsPerMnd != null ? wsPerMnd + fdDoel : null;       // alle plaatsingen samen (zoals het bord telt)
+  const tekortTempo = totPerMnd != null ? totPerMnd - gps.tempo : null;
+  // vertaling naar activiteiten via je eigen conversie-keten (alleen het W&S-deel)
   const kt = conversieKeten();
   const offPerPl = kt.offerPerPlaatsing, voorPerOff = kt.voorPerOffer;
-  const offersPerMnd = offPerPl != null && plPerMnd != null ? plPerMnd * offPerPl : null;
+  const offersPerMnd = offPerPl != null && wsPerMnd != null ? wsPerMnd * offPerPl : null;
   const voorstPerMnd = offersPerMnd != null && voorPerOff != null ? offersPerMnd * voorPerOff : null;
-  // flex in dezelfde munt: wat is 1 flexkracht (vol traject t/m overname) waard t.o.v. een W&S-plaatsing
-  const flexActief = (D.flexPl || []).filter(f => !f.einde);
-  const flexWaardes = flexActief.map(f => flexPlBerekening(f).overnameWaarde).filter(Boolean);
-  const gemFlexWaarde = flexWaardes.length ? flexWaardes.reduce((s, x) => s + x, 0) / flexWaardes.length : null;
-  const flexEq = gemFlexWaarde && netPerPl > 0 ? gemFlexWaarde / netPerPl : null;
   const omzetKoers = od.omzetRunRate >= od.doel;
   const winstKoers = gps.doel != null && gps.restJaar && gps.restJaar.perMnd != null && gps.tempo >= gps.restJaar.perMnd;
   const f1 = x => x == null ? '—' : (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
@@ -721,19 +725,29 @@ function renderWinstDoelen(root) {
     <div style="border:2px solid var(--accent);border-radius:12px;padding:14px 16px;background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
       <div class="spread" style="margin-bottom:4px"><b>📋 Zo haal je het — nog ${mndRest} maanden t/m 31 dec</b>
         <span class="muted" style="font-size:11px">strengste van beide doelen telt (nu: ${leidend})</span></div>
-      ${missieRij('⚡', `Plaatsingen: <b style="color:var(--accent)">${f1(plPerMnd)} per maand</b>`,
-        `${Math.ceil(plNodig)} totaal`,
+      ${missieRij('🎯', `Samen: <b style="color:var(--accent)">${f1(totPerMnd)} plaatsingen per maand</b> <span class="muted" style="font-weight:400">(flex + W&S)</span>`,
+        `${totPerMnd != null ? Math.ceil(totPerMnd * mndRest) : '—'} totaal`,
         tekortTempo != null && tekortTempo > 0.05
           ? `je zit nu op ${f1(gps.tempo)}/mnd → er moet <b style="color:var(--amber)">+${f1(tekortTempo)}/mnd bij</b>`
           : `je zit nu op ${f1(gps.tempo)}/mnd → <b style="color:var(--green)">dit tempo vasthouden is genoeg</b>`)}
+      <div style="display:flex;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)">
+        <span style="font-size:18px">🟢</span>
+        <div style="flex:1"><b>Flex-doel: nieuwe flexkrachten per maand</b><br>
+          <span class="muted" style="font-size:12px">1 flexkracht ≈ <b>${eur(pw.flex.streef)}</b> marge (streef) · echt potentieel ${eur(pw.flex.echt)} · netto na uitval <b>${eur(pw.flex.nettoEcht)}</b> — nu ${flexActief.length} actief</span></div>
+        <input id="flexDoelPm" type="number" min="0" max="10" step="1" value="${fdDoel}" style="width:58px;text-align:right;font-size:16px;font-weight:700"></div>
+      ${missieRij('⚡', `W&S-plaatsingen: <b style="color:var(--accent)">${f1(wsPerMnd)} per maand</b>`,
+        `${wsPerMnd != null ? Math.ceil(wsPerMnd * mndRest) : '—'} totaal`,
+        `netto, echte cijfers · in streefwaarden (€${Math.round(pw.ws.streef / 1000)}k W&S / €${Math.round(pw.flex.streef / 1000)}k flex, zonder uitval) zou <b>${f1(wsPerMndBruto)}/mnd</b> volstaan — dat is het verschil dat uitval je kost`)}
       ${missieRij('📄', `Offers: ~${f1(offersPerMnd)} per maand`, offersPerMnd != null ? Math.ceil(offersPerMnd * mndRest) + ' totaal' : '—',
-        `1 plaatsing kost jou gemiddeld ${f1(offPerPl)} offers (eigen cijfers)`)}
+        `1 W&S-plaatsing kost jou gemiddeld ${f1(offPerPl)} offers (eigen cijfers)`)}
       ${missieRij('📣', `Voorstellen: ~${f1(voorstPerMnd)} per maand`, voorstPerMnd != null ? '≈ ' + f1(voorstPerMnd / 4.33) + ' per week' : '—',
         `1 offer kost jou gemiddeld ${f1(voorPerOff)} voorstellen — dit is wat het team wekelijks bovenin moet stoppen`)}
-      ${gemFlexWaarde ? `<div style="display:flex;gap:12px;align-items:center;padding:9px 0">
-        <span style="font-size:18px">🟢</span>
-        <div style="flex:1"><b>Flex telt óók — en dubbel</b><br><span class="muted" style="font-size:12px">1 flexkracht die zijn uren afmaakt ≈ <b>${eur(gemFlexWaarde)}</b> marge ≈ <b style="color:var(--green)">${f1(flexEq)} W&S-plaatsingen</b> (nu ${flexActief.length} actief). Zet je er een weg, dan daalt het benodigde W&S-tempo hierboven vanzelf mee zodra de weekmarge stijgt.</span></div></div>` : ''}
-      <p class="muted" style="font-size:11px;margin:8px 0 0">Plaatsingen netto gerekend (na ${Math.round((1 - gps.blijf) * 100)}% uitval, gem. fee ${eur(od.gemFee)}); flex-marge (~${eur(gps.flexPm)}/mnd) is al meegeteld. Ratio's komen live uit je eigen conversie-keten.</p>
+      <div style="overflow-x:auto;margin-top:8px"><table style="width:100%;font-size:12px;border-collapse:collapse">
+        <tr class="muted" style="text-align:right"><th style="text-align:left;font-weight:600">Waarde per plaatsing</th><th>Streefpunt</th><th>Echt gemiddeld</th><th>Netto incl. stoppers</th></tr>
+        <tr style="text-align:right;font-variant-numeric:tabular-nums"><td style="text-align:left">W&S (fee, excl. btw)</td><td><b>${eur(pw.ws.streef)}</b></td><td>${eur(pw.ws.echt)}</td><td><b>${eur(pw.ws.nettoEcht)}</b> <span class="muted">(blijf ${Math.round(pw.ws.blijf * 100)}%)</span></td></tr>
+        <tr style="text-align:right;font-variant-numeric:tabular-nums"><td style="text-align:left">Flex (marge t/m overname)</td><td><b>${eur(pw.flex.streef)}</b></td><td>${eur(pw.flex.echt)}</td><td><b>${eur(pw.flex.nettoEcht)}</b> <span class="muted">(blijf ${Math.round(pw.flex.blijf * 100)}%, stoppers ~${eur(pw.flex.bijStop)}, n=${pw.flex.n})</span></td></tr>
+      </table></div>
+      <p class="muted" style="font-size:11px;margin:8px 0 0">Gerekend met échte cijfers: netto per W&S-plaatsing ${eur(pw.ws.nettoEcht)} (gem. fee ${eur(od.gemFee)} × blijf ${Math.round(gps.blijf * 100)}%), per flex-plaatsing ${eur(pw.flex.nettoEcht)}. De marge van al lópende flexkrachten (~${eur(gps.flexPm)}/mnd) is al van het doel af — het flex-doel hierboven gaat over níeuwe krachten. Let op de kas-kant: een W&S-fee staat in 1-3 mnd op de bank, flexmarge druppelt per week binnen over maanden (zie 13-weken cashflow). Streefwaarden aanpasbaar in Instellingen.</p>
     </div>
     <details style="margin-top:10px">
       <summary style="cursor:pointer;font-weight:600;font-size:13px">🔍 Detail-opbouw (t/m 31 dec & komende 12 mnd)</summary>
@@ -764,6 +778,7 @@ function renderWinstDoelen(root) {
 
   $('#gps_doel').onchange = async e => { await saveSetting('doel_winst_jaar', Math.max(0, +e.target.value || 0)); toast('Doelwinst opgeslagen ✓'); rerender(); };
   $('#gps_omzet').onchange = async e => { await saveSetting('doel_omzet_jaar', Math.max(0, +e.target.value || 0)); toast('Doelomzet opgeslagen ✓'); rerender(); };
+  $('#flexDoelPm').onchange = async e => { await saveSetting('flex_doel_pm', Math.max(0, Math.round(+e.target.value || 0))); toast('Flex-doel opgeslagen ✓'); rerender(); };
   wireWinstDoor();
   wireInvest();
 }
