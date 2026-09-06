@@ -616,6 +616,76 @@ function breakEvenMix(flexDoelPm = null) {
   return { w, flexDoel: fd, kostPm, breakeven: mix(kostPm), winstdoel: mix(kostPm + winstPm) };
 }
 
+// ── klant-scorecard: wat een plaatsing bij deze klant écht in kas brengt ──
+// Kern (Tjeerd, 6 sep '26): stoppers zeggen niet wat er op de bank komt — de
+// REGELING bepaalt de schade. 100% bij tekenen of kosteloos inruilen: een stop
+// kost geen omzet; 50/50: de tweede helft vervalt; flex: de kasstroom stopt meteen.
+// Kasrealisatie = gefactureerd ÷ (gefactureerd + vervallen), over besliste termijnen.
+function klantScorecard() {
+  const perK = {};
+  D.placements.filter(p => !p.concept).forEach(p => {
+    const st = placementStats(p); const k = p.klant || '?';
+    const o = perK[k] = perK[k] || { n: 0, verv: 0, stops: 0, fee: 0, gefact: 0, vervallen: 0, open: 0, tN: 0 };
+    o.n++; o.fee += Number(p.fee_excl || 0); o.gefact += st.gefact; o.vervallen += st.vervallen; o.open += st.nog;
+    if (p.gestopt_op) o.stops++;
+    const cand = D.candidates.find(c => c.id === p.pipeline_candidate_id);
+    if (cand && (cand.vervangt || '')) o.verv++;
+    o.tN += Number(p.aantal_termijnen) || st.ins.length || 1;
+  });
+  const ondergrens = Number(S('scorecard_ondergrens', 5000));
+  const rows = Object.entries(perK).map(([klant, v]) => {
+    const beslist = v.gefact + v.vervallen;
+    const realisatie = beslist > 0 ? v.gefact / beslist : 1;
+    const gemFee = v.fee / v.n;
+    const gemT = v.tN / v.n;
+    const regeling = (gemT <= 1.2 ? '100% bij tekenen' : gemT <= 2.2 ? '50/50' : Math.round(gemT) + ' termijnen') + (v.verv ? ' + inruil' : '');
+    return { klant, n: v.n, stops: v.stops, vervangers: v.verv, gemFee, regeling,
+      gefact: v.gefact, vervallen: v.vervallen, open: v.open, realisatie,
+      waarde: gemFee * realisatie, kleinN: v.n < 5, onder: gemFee * realisatie < ondergrens };
+  }).sort((a, b) => b.waarde - a.waarde);
+  return { rows, ondergrens };
+}
+
+// ── waarde weggezet: netto kaswaarde van de deze maand getekende plaatsingen ──
+// Elke W&S-deal telt voor fee × kasrealisatie van de klant (klant onbekend →
+// bedrijfsgemiddelde), elke nieuwe flexkracht voor de netto flexwaarde.
+function waardeWeggezet(mnd = null) {
+  const m = (mnd || monthKey(todayISO())).slice(0, 7);
+  const sc = klantScorecard();
+  const rMap = Object.fromEntries(sc.rows.map(r => [r.klant, r.realisatie]));
+  const gemR = sc.rows.length ? sc.rows.reduce((s, r) => s + r.realisatie * r.n, 0) / sc.rows.reduce((s, r) => s + r.n, 0) : 1;
+  let som = 0, aantal = 0;
+  D.placements.filter(p => !p.concept && ((p.contract_datum || p.eerste_factuurdatum || '').slice(0, 7) === m)).forEach(p => {
+    const cand = D.candidates.find(c => c.id === p.pipeline_candidate_id);
+    if (cand && (cand.vervangt || '')) return;              // inruil = geen nieuwe fee
+    som += Number(p.fee_excl || 0) * (rMap[p.klant] ?? gemR); aantal++;
+  });
+  const flexW = plaatsingsWaarden().flex.nettoEcht;
+  (D.flexPl || []).filter(f => !f.concept && (f.start || '').slice(0, 7) === m).forEach(() => { som += flexW; aantal++; });
+  return { som, aantal, maand: m };
+}
+
+// ── dag-30-overleving per startcohort + dekking van stopredenen ──────────────
+function cohort30() {
+  const t = todayISO(), grens30 = addDays(t, -30);
+  const gestart = D.candidates.filter(c => c.geplaatst_op && !(c.vervangt || ''));
+  const perM = {};
+  gestart.forEach(c => {
+    const ref = c.start || c.geplaatst_op;
+    if (ref > grens30) return;                              // nog geen 30 dagen onderweg
+    const m = ref.slice(0, 7);
+    const o = perM[m] = perM[m] || { n: 0, over: 0 };
+    o.n++;
+    if (!c.gestopt_op || c.gestopt_op >= addDays(ref, 30)) o.over++;
+  });
+  const cohorten = Object.entries(perM).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4)
+    .map(([m, v]) => ({ maand: m, n: v.n, over: v.over, pct: v.over / v.n }));
+  const stops60 = D.candidates.filter(c => c.fase === 'Gestopt' && c.gestopt_op && c.gestopt_op >= addDays(t, -60));
+  const metReden = stops60.filter(c => (c.stop_categorie || '').trim()).length;
+  return { cohorten, stops60: stops60.length, metReden,
+    dekking: stops60.length ? metReden / stops60.length : null };
+}
+
 // ── conversie-keten: voorstel → offer → plaatsing → blijver ─────
 // Gebaseerd op afgeronde trajecten (bord): hoeveel heb je er van elk nodig?
 function conversieKeten(filter = {}) {

@@ -16,6 +16,7 @@ function renderInstellingen(root) {
     { key: 'streef_fee_ws', lbl: 'Streefwaarde W&S-plaatsing (fee excl. btw, standaard 9.000)', type: 'eur' },
     { key: 'streef_waarde_flex', lbl: 'Streefwaarde flex-plaatsing (marge t/m overname, standaard 12.000)', type: 'eur' },
     { key: 'flex_doel_pm', lbl: 'Flex-doel: nieuwe flexkrachten per maand', type: 'int' },
+    { key: 'scorecard_ondergrens', lbl: 'Klant-scorecard: ondergrens € per plaatsing (standaard 5.000)', type: 'eur' },
   ];
   const rows = velden.map(v => {
     const val = S(v.key);

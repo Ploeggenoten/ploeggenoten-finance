@@ -469,6 +469,35 @@ function renderAdvies(root) {
       </table></div></div>
     ${belHtml}
     ${(() => {
+      const sc = klantScorecard();
+      if (!sc.rows.length) return '';
+      const co = cohort30();
+      const wz = waardeWeggezet();
+      const mNaam = mk => fmtMaand(mk + '-01');
+      return `<div class="panel mb"><div class="spread mb"><h2>💶 Klant-scorecard <span class="muted">— wat een plaatsing écht in kas brengt</span> ${uitlegChip('a_scorecard')}</h2>
+      <label class="muted" style="font-size:12px">ondergrens € <input id="sc_grens" type="number" step="500" min="0" value="${sc.ondergrens}" style="width:80px;text-align:right"></label></div>
+      <div class="table-wrap"><table>
+      <tr><th>Klant</th><th>Regeling</th><th class="num">Plaatsingen</th><th class="num">Stop%</th><th class="num">Kasrealisatie</th><th class="num">€ per nieuwe plaatsing</th></tr>
+      ${sc.rows.map(r => `<tr><td>${esc(r.klant)}${r.kleinN ? ' <span class="muted" title="minder dan 5 plaatsingen — realisatie nog dun">ⁿ</span>' : ''}</td>
+        <td class="muted">${esc(r.regeling)}</td>
+        <td class="num">${r.n}${r.vervangers ? ` <span class="muted">(+${r.vervangers} inruil)</span>` : ''}</td>
+        <td class="num">${Math.round(r.stops / r.n * 100)}%</td>
+        <td class="num"><b>${Math.round(r.realisatie * 100)}%</b>${r.vervallen ? ` <span class="muted" title="vervallen door stoppers">−${eur(r.vervallen)}</span>` : ''}</td>
+        <td class="num"><b style="color:${r.onder ? 'var(--amber)' : 'var(--green)'}">${eur(r.waarde)}</b>${r.onder ? ' <span class="tag amber">onder grens</span>' : ''}</td></tr>`).join('')}
+      </table></div>
+      <p class="muted mt" style="font-size:12px"><b>De regeling bepaalt de schade van een stopper, niet de stop zelf:</b> bij 100%-bij-tekenen of kosteloos inruilen kost een stop geen omzet (wel dubbele levering), bij 50/50 vervalt de tweede helft. Kasrealisatie = gefactureerd ÷ (gefactureerd + vervallen). € per nieuwe plaatsing = gem. fee × kasrealisatie — dit telt mee in "waarde weggezet". Onder de grens (${eur(sc.ondergrens)})? Dan eerst de regeling of de nazorg verbeteren vóór de volgende plaatsing daar.</p>
+      <div class="grid cols-2 mt" style="gap:12px">
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">
+          <b>📆 Dag-30-overleving per startmaand</b><br>
+          <span style="font-size:13px">${co.cohorten.length ? co.cohorten.map(c => `<span class="tag ${c.pct >= .75 ? 'green' : c.pct >= .5 ? 'amber' : 'red'}">${mNaam(c.maand)}: <b>${Math.round(c.pct * 100)}%</b> (${c.over}/${c.n})</span>`).join(' ') : '<span class="muted">nog geen cohorten met 30 dagen historie</span>'}</span>
+          <div class="muted" style="font-size:11px;margin-top:4px">doel: ≥75% van de starters is op dag 30 nog aan het werk</div></div>
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">
+          <b>📝 Stopreden geregistreerd (laatste 60 dgn)</b><br>
+          <span style="font-size:18px;font-weight:700">${co.dekking == null ? '—' : Math.round(co.dekking * 100) + '%'}</span> <span class="muted">(${co.metReden} van ${co.stops60})</span>
+          <div class="muted" style="font-size:11px;margin-top:4px">doel: 100% — een stop zonder reden is een les die je weggooit · deze maand ${eur(wz.som)} waarde weggezet (${wz.aantal} deals)</div></div>
+      </div></div>`;
+    })()}
+    ${(() => {
       const ta = tariefAdvies();
       if (!ta.rows.length) return '';
       const topPot = ta.rows[0];
@@ -496,6 +525,7 @@ function renderAdvies(root) {
   wireSdCalc();
   wireKeten();
   root.addEventListener('change', async e => {
+    if (e.target.id === 'sc_grens') { await saveSetting('scorecard_ondergrens', Math.max(0, Number(e.target.value) || 0)); toast('Ondergrens opgeslagen ✓'); return rerender(); }
     if (e.target.id === 'bel_loon') { await saveSetting('dga_loon_pm', Math.max(0, Number(e.target.value) || 0)); toast('DGA-loon opgeslagen ✓'); return rerender(); }
     if (e.target.id === 'bel_start') { await saveSetting('dga_start_maand', Number(e.target.value) || 0); toast('Startmaand opgeslagen ✓'); return rerender(); }
     const inp = e.target.closest('.recdoel');

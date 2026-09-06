@@ -104,6 +104,10 @@ const UITLEG = {
     <p><b>Wat je ziet:</b> de kern-indicatoren die een financieel adviseur in een recruitmentbureau zou nalopen.</p>
     <p><b>Hoe berekend:</b> per thema een norm (bijv. buffer 3–6 mnd kosten, cost-per-placement < 30% fee) met jouw actuele waarde ernaast.</p>
     <p><b>Hoe sturen:</b> groen = op orde, oranje/rood = aandacht. Dit is je maandelijkse APK.</p>` },
+  a_scorecard: { t: '💶 Klant-scorecard', h: `
+    <p><b>Wat je ziet:</b> per klant wat een nieuwe plaatsing daar écht in kas brengt, o.b.v. wat je daadwerkelijk factureert. Niet de stop% is bepalend, maar de <b>regeling</b>: bij 100%-bij-tekenen of kosteloos inruilen kost een stopper geen omzet, bij 50/50 vervalt de tweede helft, bij flex stopt de kasstroom meteen.</p>
+    <p><b>Hoe berekend:</b> kasrealisatie = gefactureerd ÷ (gefactureerd + vervallen) over alle besliste termijnen van die klant. € per nieuwe plaatsing = gemiddelde fee × kasrealisatie. De ⁿ markeert klanten met minder dan 5 plaatsingen (dunne data). Dag-30-overleving telt per startmaand wie er op dag 30 nog werkt.</p>
+    <p><b>Hoe sturen:</b> klanten onder de ondergrens krijgen eerst een beter regeling- of nazorggesprek vóór de volgende plaatsing. Bij nieuwe klanten: stuur op 100%-bij-tekenen of inruil i.p.v. 50/50 — de regeling is een stuurknop. En elke stop zonder geregistreerde reden is een les die je weggooit.</p>` },
   a_tarief: { t: '🏷 Tarief-adviseur', h: `
     <p><b>Wat je ziet:</b> per klant het afgesproken W&S-tarief naast je gewogen gemiddelde, en hoeveel "rek" er op jaarbasis zit als een klant naar dat gemiddelde zou gaan.</p>
     <p><b>Hoe berekend:</b> netto omzet per klant dit jaar (na vervallen termijnen), geëxtrapoleerd naar 12 maanden; rek = die jaaromzet × het tariefverschil. Gemiddelde is gewogen naar omzet.</p>
@@ -725,6 +729,11 @@ function renderWinstDoelen(root) {
     <div style="border:2px solid var(--accent);border-radius:12px;padding:14px 16px;background:linear-gradient(180deg,rgba(200,241,53,.05),transparent)">
       <div class="spread" style="margin-bottom:4px"><b>📋 Zo haal je het — nog ${mndRest} maanden t/m 31 dec</b>
         <span class="muted" style="font-size:11px">strengste van beide doelen telt (nu: ${leidend})</span></div>
+      ${(() => { const wz = waardeWeggezet(); const be = breakEven().kostPm;
+        const wdW = (be + (Number(S('doel_winst_jaar', 0)) || 0) / 12) / 4.33;
+        return missieRij('💶', `Waarde weggezet deze maand: <b style="color:var(--accent)">${eur(wz.som)}</b>`,
+          `${wz.aantal} deal${wz.aantal === 1 ? '' : 's'}`,
+          `elke deal telt voor fee × kasrealisatie van de klant (zie Klant-scorecard op Advies) · weekdoel ~${eur(be / 4.33)} voor break-even, ~${eur(wdW)} voor het winstdoel`); })()}
       ${missieRij('🎯', `Samen: <b style="color:var(--accent)">${f1(totPerMnd)} plaatsingen per maand</b> <span class="muted" style="font-weight:400">(flex + W&S)</span>`,
         `${totPerMnd != null ? Math.ceil(totPerMnd * mndRest) : '—'} totaal`,
         tekortTempo != null && tekortTempo > 0.05
