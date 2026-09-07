@@ -31,7 +31,8 @@ function renderFacturatie(root) {
       const vv = vervaldatum(i, p);
       const late = i.status === 'gefactureerd' && vv && vv < t ? daysBetween(vv, t) : 0;
       const missed = i.status === 'te_factureren' && i.geplande_datum && i.geplande_datum < t;
-      const stTag = { te_factureren: missed ? tag('GEMIST', 'red') : tag('te factureren', 'amber'), gefactureerd: late ? tag(late + ' dgn te laat', 'red') : tag('wacht op betaling', 'blue'), betaald: tag('betaald', 'green'), vervallen: tag('vervallen', 'gray') }[i.status];
+      const dgnTot = i.status === 'gefactureerd' && vv ? daysBetween(t, vv) : null;
+      const stTag = { te_factureren: missed ? tag('GEMIST', 'red') : tag('te factureren', 'amber'), gefactureerd: late ? tag(late + ' dgn te laat', 'red') : dgnTot != null && dgnTot <= 7 ? tag(`vervalt over ${dgnTot} dgn`, 'amber') : tag('wacht op betaling', 'blue'), betaald: tag('betaald', 'green'), vervallen: tag('vervallen', 'gray') }[i.status];
       let act = '';
       if (i.status === 'te_factureren') act = `<button class="btn small primary" data-fact="${i.id}">Gefactureerd ✓</button>`;
       if (i.status === 'gefactureerd') act = `<button class="btn small primary" data-paid="${i.id}">Betaald ✓</button>`;
@@ -47,6 +48,34 @@ function renderFacturatie(root) {
       <tr><th>Gepland</th><th>Termijn</th><th>Kandidaat</th><th>Klant</th><th class="num">Excl.</th><th class="num">Incl.</th><th>Status</th><th></th></tr>
       ${rows}</table></div></div>`;
   }).join('');
+
+  // ── wacht op betaling, op vervaldatum: hier stuur je op vóórdat iets te laat is ──
+  const btwF = btw;
+  const openInv = D.installments.filter(i => i.status === 'gefactureerd').map(i => {
+    const p = D.placements.find(x => x.id === i.placement_id);
+    if (!p) return null;
+    const vv = vervaldatum(i, p);
+    return { i, p, vv, dgn: vv ? daysBetween(t, vv) : null };
+  }).filter(Boolean).sort((a, b) => (a.vv || '9999').localeCompare(b.vv || '9999'));
+  const somI = xs => xs.reduce((s, x) => s + x.i.bedrag_excl * btwF, 0);
+  const teLaatI = openInv.filter(x => x.dgn != null && x.dgn < 0);
+  const dezeWk = openInv.filter(x => x.dgn != null && x.dgn >= 0 && x.dgn <= 7);
+  const vvTag = d => d == null ? tag('geen termijn', 'gray')
+    : d < 0 ? tag(`${-d} dgn te laat`, 'red')
+    : d === 0 ? tag('vervalt vandaag', 'red')
+    : d <= 7 ? tag(`vervalt over ${d} dgn`, 'amber')
+    : `<span class="muted">over ${d} dgn</span>`;
+  const bewakingHtml = openInv.length ? `
+    <div class="panel mb"><div class="spread mb"><h2>💳 Wacht op betaling <span class="muted">— op volgorde van vervaldatum</span></h2>
+      <span class="muted">${teLaatI.length ? `<b style="color:var(--red,#c0392b)">${teLaatI.length} te laat (${eur(somI(teLaatI))} incl)</b> · ` : ''}${dezeWk.length ? `<b style="color:var(--amber,#a86a1a)">${dezeWk.length} vervalt ≤7 dgn (${eur(somI(dezeWk))} incl)</b> · ` : ''}totaal ${openInv.length} open · ${eur(somI(openInv))} incl. btw</span></div>
+      <div class="table-wrap"><table>
+      <tr><th>Vervalt</th><th>Kandidaat</th><th>Klant</th><th class="num">Incl. btw</th><th>Status</th><th></th></tr>
+      ${openInv.map(({ i, p, vv, dgn }) => `<tr class="clickable" data-open="${esc(p.id)}">
+        <td>${vv ? fmtD(vv) : '—'}</td><td>${esc(p.kandidaat)} <span class="muted">t${i.termijn_nr}</span></td><td>${esc(p.klant)}</td>
+        <td class="num">${eur2(i.bedrag_excl * btwF)}</td><td>${vvTag(dgn)}</td>
+        <td class="right" onclick="event.stopPropagation()"><button class="btn small primary" data-paid="${i.id}">Betaald ✓</button></td></tr>`).join('')}
+      </table></div>
+      <p class="muted mt" style="font-size:11px">Vervaldatum = factuurdatum + betaaltermijn van de klant. Amber = deze week bellen/herinneren vóór hij te laat wordt; rood = aanmanen. Betaald wordt ook automatisch gesuggereerd via de Yuki-koppeling.</p></div>` : '';
 
   root.innerHTML = `
     <div class="spread mb"><h1>Facturatie</h1>
@@ -64,6 +93,7 @@ function renderFacturatie(root) {
           ${klanten.map(k => `<option ${factFilter.klant === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
         </select>
       </div></div>
+    ${bewakingHtml}
     ${blokken || '<div class="empty">Niets gevonden met dit filter.</div>'}`;
 
   $('#fFilter').onchange = e => { factFilter.status = e.target.value; rerender(); };
