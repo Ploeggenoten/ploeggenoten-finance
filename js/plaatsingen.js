@@ -421,8 +421,11 @@ function openInstallmentEdit(inst, pid) {
     const mag = { te_factureren: [], vervallen: [], gefactureerd: ['f'], betaald: ['f', 'b'] }[status] || ['f', 'b'];
     await dbWrite('fin_installments', t => t.update({
       bedrag_excl: Number($('#ie_bedrag').value || 0), geplande_datum: nieuweDatum, status,
-      factuurdatum: mag.includes('f') ? ($('#ie_fact').value || null) : null,
-      betaaldatum: mag.includes('b') ? ($('#ie_paid').value || null) : null,
+      /* Gefactureerd of betaald zonder datum viel uit "deze maand" en het
+         btw-potje (die rekenen op de factuurdatum) — dan vandaag, net als
+         de ✓-knoppen al doen. */
+      factuurdatum: mag.includes('f') ? ($('#ie_fact').value || inst.factuurdatum || todayISO()) : null,
+      betaaldatum: mag.includes('b') ? ($('#ie_paid').value || inst.betaaldatum || todayISO()) : null,
     }).eq('id', inst.id));
     if (inst.termijn_nr === 1 && nieuweDatum && nieuweDatum !== inst.geplande_datum)
       await dbWrite('fin_placements', t => t.update({ eerste_factuurdatum: nieuweDatum }).eq('id', pid));

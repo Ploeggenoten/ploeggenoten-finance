@@ -226,8 +226,10 @@ function openFlexModal(w = null) {
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
     <button class="btn primary" id="fx_save">Opslaan</button></div>`, { narrow: true });
   $('#fx_save').onclick = async () => {
-    const bedrag = Number($('#fx_bedrag').value);
-    if (isNaN(bedrag)) return toast('Vul een bedrag in', true);
+    const ruw = $('#fx_bedrag').value.trim();   // leeg is geen €0 (Number('') === 0)
+    const bedrag = Number(ruw);
+    if (ruw === '' || isNaN(bedrag)) return toast('Vul een bedrag in', true);
+    if (!$('#fx_week').value) return toast('Kies een week', true);
     const row = {
       week: maandagVan($('#fx_week').value), bedrag,
       flexkrachten: $('#fx_aantal').value ? Number($('#fx_aantal').value) : null,

@@ -214,8 +214,11 @@ function openSaldoModal() {
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Annuleren</button>
     <button class="btn primary" id="s_save">Opslaan</button></div>`, { narrow: true });
   $('#s_save').onclick = async () => {
-    const saldo = Number($('#s_saldo').value);
-    if (isNaN(saldo)) return toast('Vul een bedrag in', true);
+    /* Number('') is 0, geen NaN: een leeg veld overschreef het saldo van
+       vandaag dan met €0. Eerst checken of er überhaupt iets staat. */
+    const ruw = $('#s_saldo').value.trim();
+    const saldo = Number(ruw);
+    if (ruw === '' || isNaN(saldo)) return toast('Vul een bedrag in', true);
     await dbWrite('fin_bank_saldo', t => t.upsert({ datum: $('#s_datum').value, saldo }, { onConflict: 'datum' }));
     await reload('fin_bank_saldo', 'saldi', 'datum', false);
     closeModal(); toast('Saldo bijgewerkt ✓'); rerender();

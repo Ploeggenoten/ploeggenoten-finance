@@ -40,7 +40,7 @@ function renderFacturatie(root) {
         <td>${fmtD(i.geplande_datum)}</td><td><b>${esc(p.id)}</b> · t${i.termijn_nr}</td>
         <td>${esc(p.kandidaat)}</td><td>${esc(p.klant)}</td>
         <td class="num">${eur2(i.bedrag_excl)}</td><td class="num muted">${eur2(i.bedrag_excl * btw)}</td>
-        <td>${stTag}</td><td class="right" onclick="event.stopPropagation()">${act}</td></tr>`;
+        <td>${stTag}</td><td class="right">${act}</td></tr>`;
     }).join('');
     return `<div class="panel mb"><div class="spread mb"><h2>${k === 'zonder' ? 'Zonder datum' : fmtMaand(k)}</h2>
       <span class="muted">${xs.length} termijn(en) · ${eur(tot)} excl. btw</span></div>
@@ -73,7 +73,7 @@ function renderFacturatie(root) {
       ${openInv.map(({ i, p, vv, dgn }) => `<tr class="clickable" data-open="${esc(p.id)}">
         <td>${vv ? fmtD(vv) : '—'}</td><td>${esc(p.kandidaat)} <span class="muted">t${i.termijn_nr}</span></td><td>${esc(p.klant)}</td>
         <td class="num">${eur2(i.bedrag_excl * btwF)}</td><td>${vvTag(dgn)}</td>
-        <td class="right" onclick="event.stopPropagation()"><button class="btn small primary" data-paid="${i.id}">Betaald ✓</button></td></tr>`).join('')}
+        <td class="right"><button class="btn small primary" data-paid="${i.id}">Betaald ✓</button></td></tr>`).join('')}
       </table></div>
       <p class="muted mt" style="font-size:11px">Vervaldatum = factuurdatum + betaaltermijn van de klant. Amber = deze week bellen/herinneren vóór hij te laat wordt; rood = aanmanen. Betaald wordt ook automatisch gesuggereerd via de Yuki-koppeling.</p></div>` : '';
 
@@ -98,6 +98,10 @@ function renderFacturatie(root) {
 
   $('#fFilter').onchange = e => { factFilter.status = e.target.value; rerender(); };
   $('#fKlant').onchange = e => { factFilter.klant = e.target.value; rerender(); };
+  /* Geen stopPropagation meer op de knopcel: die hield de klik tegen vóór
+     deze handler, waardoor "Gefactureerd ✓" en "Betaald ✓" in deze tab
+     niets deden. De knoppen worden hieronder als eerste afgevangen, dus
+     de rij-klik (detail openen) gaat er niet alsnog overheen. */
   root.addEventListener('click', async e => {
     const f = e.target.closest('[data-fact]');
     if (f) return markeerInstallment(D.installments.find(i => i.id === +f.dataset.fact), 'gefactureerd');
