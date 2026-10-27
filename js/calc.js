@@ -82,6 +82,7 @@ function inboxCandidates() {
     // kandidaat (bijv. terug naar Offer) telt NIET — anders ontstaan spookplaatsingen.
     (PLACED_FASES.includes(c.fase) || (c.geplaatst_op && c.fase === 'Gestopt')) &&
     !isFlexType(c.type) &&                        // flex loopt via Pronkert, niet via W&S-facturatie
+    (c.type || '') !== 'ZZP' &&                   // ZZP loopt via de klus-marge in het CRM, niet via een W&S-fee
     !(c.vervangt || '') &&                        // garantievervangers zijn geen nieuwe fee
     !linked.has(c.id) && !dismissed.has(c.id) &&
     // naam-vangnet tegen dubbels — behalve bij een herstart (♻): dat is bewust een nieuw traject
