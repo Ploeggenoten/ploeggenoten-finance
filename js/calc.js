@@ -7,7 +7,12 @@ const instOf = pid => D.installments.filter(i => i.placement_id === pid)
 const isFlexType = t => { const x = (t || '').toLowerCase(); return x === 'flex' || x === 'detachering'; };
 
 function vervaldatum(inst, p) {
-  const basis = inst.factuurdatum || inst.geplande_datum;
+  /* Een factuurdatum telt alleen als de termijn écht gefactureerd is. Een
+     achtergebleven datum op een termijn die terug op "te factureren" staat
+     (Torin/Rijnbeek, 27 okt 2026: factuurdatum 24 aug, gepland 24 sep)
+     trok de verwachte betaling anders een maand naar voren in de cashflow. */
+  const echt = inst.status === 'gefactureerd' || inst.status === 'betaald';
+  const basis = (echt && inst.factuurdatum) || inst.geplande_datum;
   return basis ? addDays(basis, Number(p?.betaaltermijn_dgn) || 14) : null;
 }
 

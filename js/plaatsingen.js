@@ -68,12 +68,16 @@ async function regenTermijnen(p, preset, opts) {
   const ins = instOf(p.id);
   if (ins.some(i => i.status === 'gefactureerd' || i.status === 'betaald'))
     return toast('Er is al gefactureerd op deze plaatsing — pas losse termijnen aan met ✎', true);
+  /* Startdatum: wat je in het schemapaneel kiest; anders waar termijn 1 nu
+     staat. Eerder pakte hij altijd de bij het aanmaken opgeslagen
+     eerste_factuurdatum — had je termijn 1 al verzet (contractdatum →
+     eerste werkdag), dan sprong het hele schema terug naar de oude datum. */
+  const start = opts.start || ins[0]?.geplande_datum || p.eerste_factuurdatum || p.contract_datum || todayISO();
   await dbWrite('fin_installments', t => t.delete().eq('placement_id', p.id));
-  const start = p.eerste_factuurdatum || p.contract_datum || todayISO();
   const schema = genSchema(preset, Number(p.fee_excl), start, opts);
   for (const r of schema)
     await dbWrite('fin_installments', t => t.insert({ placement_id: p.id, termijn_nr: r.nr, bedrag_excl: r.bedrag, geplande_datum: r.datum, status: 'te_factureren' }));
-  await dbWrite('fin_placements', t => t.update({ aantal_termijnen: schema.length, maanden_tussen: opts.tussen || opts.naMnd || 1 }).eq('id', p.id));
+  await dbWrite('fin_placements', t => t.update({ aantal_termijnen: schema.length, maanden_tussen: opts.tussen || opts.naMnd || 1, eerste_factuurdatum: start }).eq('id', p.id));
   await Promise.all([reload('fin_installments', 'installments', 'geplande_datum'), reload('fin_placements', 'placements', 'id')]);
   return true;
 }
@@ -208,7 +212,15 @@ function openPlacementDetail(pid) {
       <td class="right">${acts.join(' ')}</td></tr>`;
   }).join('');
 
-  openModal(`
+  /* Altijd maar één detailvenster tegelijk. Na het opslaan van een termijn
+     (✎) sluit alleen het bewerkvenster en opent dit venster opnieuw —
+     daardoor stonden er twee kopieën op elkaar en hingen alle knoppen aan
+     de verborgen kopie eronder: "Fee klopt — bevestigen", "Termijnen
+     zetten" en "Bewerken" deden dan niets (Tjeerd, 27 okt 2026). Oude
+     kopie weg, en alle knoppen zoeken binnen dít venster (q), niet in de
+     hele pagina. */
+  document.querySelectorAll('#modalRoot .modal-bg[data-detail]').forEach(el => el.remove());
+  const bg = openModal(`
     <div class="modal-head"><h2>${esc(p.id)} · ${esc(p.kandidaat)} <span class="muted">— ${esc(p.klant)}</span></h2>
       <button class="btn ghost small" onclick="closeModal()">✕</button></div>
     <div class="row mb">
@@ -249,6 +261,7 @@ function openPlacementDetail(pid) {
         </select>
         <span id="d_50opts">2e helft na <input id="d_naMnd" type="number" min="1" max="12" value="3" style="width:56px"> mnd</span>
         <span id="d_nxopts" style="display:none"><input id="d_n" type="number" min="2" value="3" style="width:52px"> × om de <input id="d_tussen" type="number" min="1" value="1" style="width:52px"> mnd</span>
+        <span>vanaf <input id="d_start" type="date" value="${esc(st.ins[0]?.geplande_datum || p.eerste_factuurdatum || p.contract_datum || todayISO())}"></span>
         <button class="btn small primary" id="d_split">Termijnen zetten</button>
       </div>
       <p class="muted" style="margin:8px 0 0">Splitst de fee (${eur2(p.fee_excl)} excl.) over de termijnen hieronder. Stopt de kandidaat vóór een termijn, dan vervalt die automatisch — je factureert alleen wat je verdiend hebt.</p>
@@ -265,8 +278,10 @@ function openPlacementDetail(pid) {
       <button class="btn" id="d_edit">Bewerken</button>
       <button class="btn danger" id="d_del">Verwijderen</button>
     </div>`);
+  bg.dataset.detail = '1';
+  const q = sel => bg.querySelector(sel);
 
-  $('#modalRoot').lastChild.addEventListener('click', async e => {
+  bg.addEventListener('click', async e => {
     const b = e.target.closest('[data-iact]');
     if (!b) return;
     const inst = D.installments.find(i => i.id === Number(b.dataset.iid));
@@ -290,41 +305,42 @@ function openPlacementDetail(pid) {
     if (b.dataset.iact === 'edit') openInstallmentEdit(inst, pid);
   });
   if (p.concept) {
-    const psSel = $('#d_preset');
+    const psSel = q('#d_preset');
     // voorselectie op basis van hoe het concept nu binnenkwam (klant-afspraak)
     const nInst = st.ins.length;
     psSel.value = nInst === 2 ? '5050' : nInst > 2 ? 'nx' : '1x';
-    if (nInst > 2) $('#d_n').value = nInst;
+    if (nInst > 2) q('#d_n').value = nInst;
     const syncOpts = () => {
-      $('#d_50opts').style.display = psSel.value === '5050' ? '' : 'none';
-      $('#d_nxopts').style.display = psSel.value === 'nx' ? '' : 'none';
+      q('#d_50opts').style.display = psSel.value === '5050' ? '' : 'none';
+      q('#d_nxopts').style.display = psSel.value === 'nx' ? '' : 'none';
     };
     syncOpts();
     psSel.onchange = syncOpts;
-    $('#d_split').onclick = async () => {
+    q('#d_split').onclick = async () => {
       const preset = psSel.value;
-      const opts = preset === '5050' ? { naMnd: Number($('#d_naMnd').value) || 3 }
-        : preset === 'nx' ? { n: Math.max(2, Number($('#d_n').value) || 2), tussen: Number($('#d_tussen').value) || 1 }
+      const opts = preset === '5050' ? { naMnd: Number(q('#d_naMnd').value) || 3 }
+        : preset === 'nx' ? { n: Math.max(2, Number(q('#d_n').value) || 2), tussen: Number(q('#d_tussen').value) || 1 }
         : {};
+      opts.start = q('#d_start').value || null;
       const ok = await regenTermijnen(p, preset, opts);
       if (ok) { closeModal(); openPlacementDetail(pid); toast('Factuurschema bijgewerkt'); }
     };
   }
-  $('#d_bevestig') && ($('#d_bevestig').onclick = async () => {
+  q('#d_bevestig') && (q('#d_bevestig').onclick = async () => {
     await dbWrite('fin_placements', t => t.update({ concept: false, updated_at: new Date().toISOString() }).eq('id', p.id));
     await reload('fin_placements', 'placements', 'id');
     closeModal(); toast(`${p.id} bevestigd ✓ — factuurschema is actief`); rerender();
   });
-  $('#d_edit').onclick = () => { closeModal(); openPlacementWizard({ edit: p }); };
-  $('#d_stop') && ($('#d_stop').onclick = () => { closeModal(); openStopModal(p); });
-  $('#d_vervang') && ($('#d_vervang').onclick = async () => {
+  q('#d_edit').onclick = () => { closeModal(); openPlacementWizard({ edit: p }); };
+  q('#d_stop') && (q('#d_stop').onclick = () => { closeModal(); openStopModal(p); });
+  q('#d_vervang') && (q('#d_vervang').onclick = async () => {
     const nieuw = prompt('ID of naam van de vervangende plaatsing/kandidaat:');
     if (!nieuw) return;
     await dbWrite('fin_placements', t => t.update({ vervangen_door: nieuw }).eq('id', p.id));
     await reload('fin_placements', 'placements', 'id');
     closeModal(); toast('Vervanging geregistreerd ✓'); rerender();
   });
-  $('#d_addTermijn').onclick = async () => {
+  q('#d_addTermijn').onclick = async () => {
     // al gefactureerde/betaalde termijnen blijven vast; de rest van de fee verdelen we opnieuw
     const teF = st.ins.filter(i => i.status === 'te_factureren');
     const leeg = teF.filter(i => Number(i.bedrag_excl || 0) === 0);
@@ -357,7 +373,7 @@ function openPlacementDetail(pid) {
     closeModal(); openPlacementDetail(pid);
     toast(`Fee gelijk verdeeld over ${n} termijn(en)${nieuwToegevoegd ? ' — pas de datum van de nieuwe termijn aan via ✎' : ''}`);
   };
-  $('#d_del').onclick = async () => {
+  q('#d_del').onclick = async () => {
     if (!confirm(`Plaatsing ${p.id} (${p.kandidaat}) én alle termijnen verwijderen?`)) return;
     if (p.pipeline_candidate_id)   // anders maakt de app hem bij de volgende load opnieuw aan
       await dbWrite('fin_dismissed_candidates', t => t.upsert({ candidate_id: p.pipeline_candidate_id }));
@@ -398,10 +414,18 @@ function openInstallmentEdit(inst, pid) {
     <button class="btn primary" id="ie_save">Opslaan</button></div>`, { narrow: true });
   $('#ie_save').onclick = async () => {
     const nieuweDatum = $('#ie_datum').value || null;
+    const status = $('#ie_status').value;
+    /* Een factuur- of betaaldatum hoort alleen bij een termijn die zo ver
+       is. Zet je hem terug naar "te factureren", dan gaan ze eraf — een
+       achtergebleven factuurdatum verschoof anders de cashflow. */
+    const mag = { te_factureren: [], vervallen: [], gefactureerd: ['f'], betaald: ['f', 'b'] }[status] || ['f', 'b'];
     await dbWrite('fin_installments', t => t.update({
-      bedrag_excl: Number($('#ie_bedrag').value || 0), geplande_datum: nieuweDatum,
-      status: $('#ie_status').value, factuurdatum: $('#ie_fact').value || null, betaaldatum: $('#ie_paid').value || null,
+      bedrag_excl: Number($('#ie_bedrag').value || 0), geplande_datum: nieuweDatum, status,
+      factuurdatum: mag.includes('f') ? ($('#ie_fact').value || null) : null,
+      betaaldatum: mag.includes('b') ? ($('#ie_paid').value || null) : null,
     }).eq('id', inst.id));
+    if (inst.termijn_nr === 1 && nieuweDatum && nieuweDatum !== inst.geplande_datum)
+      await dbWrite('fin_placements', t => t.update({ eerste_factuurdatum: nieuweDatum }).eq('id', pid));
     const schuif = $('#ie_schuif');
     if (schuif && schuif.checked && nieuweDatum && nieuweDatum !== inst.geplande_datum) {
       /* Elke latere open termijn: nieuwe datum + één maand per stap ná
